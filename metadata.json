@@ -1,0 +1,5 @@
+{
+  "name": "Order Management Dashboard",
+  "description": "A comprehensive dashboard for tracking work orders and sub-orders through different departments. It allows for creation, financial updates, and provides a detailed view with filtering and summaries for commercial, unit, and finance directors.",
+  "requestFramePermissions": []
+}

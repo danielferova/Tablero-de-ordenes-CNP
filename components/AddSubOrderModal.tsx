@@ -5,21 +5,21 @@ import { ALL_UNITS } from '../constants';
 interface AddSubOrderModalProps {
     order: Order;
     onClose: () => void;
-    onSubmit: (order: Order, unit: Unit, details: { workType: string; description: string }) => void;
+    onSubmit: (order: Order, details: { unit: Unit, workType: string; description: string }) => void;
 }
 
 const AddSubOrderModal: React.FC<AddSubOrderModalProps> = ({ order, onClose, onSubmit }) => {
-    const [selectedUnit, setSelectedUnit] = useState<Unit | ''>('');
     const [workType, setWorkType] = useState('');
     const [description, setDescription] = useState('');
+    const [selectedUnit, setSelectedUnit] = useState<Unit | ''>('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedUnit || !workType || !description) {
-            alert('Por favor, complete todos los campos.');
+        if (!workType || !description || !selectedUnit) {
+            alert('Por favor, complete todos los campos, incluyendo la unidad.');
             return;
         }
-        onSubmit(order, selectedUnit, { workType, description });
+        onSubmit(order, { unit: selectedUnit, workType, description });
     };
 
     return (
@@ -28,17 +28,19 @@ const AddSubOrderModal: React.FC<AddSubOrderModalProps> = ({ order, onClose, onS
                 <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Añadir Tarea a Orden: <span className="text-brand-primary">{order.orderNumber}</span></h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label htmlFor="unit-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Asignar a unidad:</label>
+                        <label htmlFor="unit" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Asignar a unidad:</label>
                         <select
-                            id="unit-select"
+                            id="unit"
                             value={selectedUnit}
-                            onChange={e => setSelectedUnit(e.target.value as Unit)}
+                            onChange={(e) => setSelectedUnit(e.target.value as Unit)}
                             className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
                             required
                         >
                             <option value="" disabled>Seleccione una unidad...</option>
-                            {ALL_UNITS.map(unit => (
-                                <option key={unit} value={unit}>{unit}</option>
+                            {ALL_UNITS.map((unit) => (
+                                <option key={unit} value={unit}>
+                                    {unit}
+                                </option>
                             ))}
                         </select>
                     </div>

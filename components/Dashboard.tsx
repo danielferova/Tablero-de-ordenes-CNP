@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Order, SubOrder, Unit, UserRole } from '../types';
+import { Order, SubOrder, Unit, UserRole, OrderStatus } from '../types';
 import OrderTable from './OrderTable';
 import FilterControls from './FilterControls';
 import SummaryCards from './SummaryCards';
@@ -10,36 +10,96 @@ interface DashboardProps {
     data: FullOrderData[];
     onEdit: (subOrder: SubOrder, order: Order) => void;
     currentUserRole: UserRole;
+    currentUserUnit: Unit | null;
     onAddSubOrder: (order: Order) => void;
     onFilteredDataChange: (data: FullOrderData[]) => void;
+    subOrderFinancials: { paidPerSubOrder: Map<string, number> };
+    directors: string[];
+    executives: string[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, onAddSubOrder, onFilteredDataChange }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onFilteredDataChange, subOrderFinancials, directors, executives }) => {
     const [filters, setFilters] = useState<{
-        unit: string;
+        unit: Unit[];
         status: string;
+        overallStatus: string;
         client: string;
         orderNumber: string;
         invoiceNumber: string;
         dateRange: { start: string; end: string };
+        director: string;
+        executive: string;
     }>({
-        unit: 'all',
+        unit: [],
         status: 'all',
+        overallStatus: 'all',
         client: '',
         orderNumber: '',
         invoiceNumber: '',
         dateRange: { start: '', end: '' },
+        director: 'all',
+        executive: 'all',
     });
 
     const filteredData = useMemo(() => {
-        return data.filter(item => {
-            const itemDate = new Date(item.creationDate);
-            const startDate = filters.dateRange.start ? new Date(filters.dateRange.start) : null;
-            const endDate = filters.dateRange.end ? new Date(filters.dateRange.end) : null;
+        // Step 1: Establish the base dataset. For a Unit Director, this means finding all orders they are part of.
+        let baseData = data;
+        if (currentUserRole === UserRole.Unidad && currentUserUnit) {
+            // Find all unique order IDs that this unit is involved in.
+            const relevantOrderIds = new Set(
+                data.filter(item => item.unit === currentUserUnit).map(item => item.orderId)
+            );
+            // The base data becomes all sub-orders (from all units) belonging to those relevant orders.
+            baseData = data.filter(item => relevantOrderIds.has(item.orderId));
+        }
+
+        // Pre-calculate overall status for each order within the base dataset
+        const ordersWithSubOrders = new Map<string, SubOrder[]>();
+        baseData.forEach(item => {
+            if (!ordersWithSubOrders.has(item.orderId)) {
+                ordersWithSubOrders.set(item.orderId, []);
+            }
+            ordersWithSubOrders.get(item.orderId)!.push(item);
+        });
+
+        const overallStatusMap = new Map<string, string>();
+        ordersWithSubOrders.forEach((subOrders, orderId) => {
+            const allCobrado = subOrders.length > 0 && subOrders.every(so => so.status === OrderStatus.Cobrado);
+            const allPendiente = subOrders.every(so => so.status === OrderStatus.Pendiente);
+            let overallStatus;
+            if (allCobrado) overallStatus = "Completado";
+            else if (allPendiente) overallStatus = "Pendiente";
+            else overallStatus = "En Progreso";
+            overallStatusMap.set(orderId, overallStatus);
+        });
+
+        // Step 2: Apply UI filters on top of the role-based dataset.
+        return baseData.filter(item => {
+            if (filters.overallStatus !== 'all' && overallStatusMap.get(item.orderId) !== filters.overallStatus) {
+                return false;
+            }
+
+            if (!item.creationDate) return false;
+            // Use replace to handle dates as local timezone, not UTC
+            const itemDate = new Date(item.creationDate.replace(/-/g, '\/'));
+            const startDate = filters.dateRange.start ? new Date(filters.dateRange.start.replace(/-/g, '\/')) : null;
+            const endDate = filters.dateRange.end ? new Date(filters.dateRange.end.replace(/-/g, '\/')) : null;
+
+            // Adjust endDate to include the whole day to ensure accurate range filtering
+            if (endDate) {
+                endDate.setHours(23, 59, 59, 999);
+            }
 
             if (startDate && itemDate < startDate) return false;
             if (endDate && itemDate > endDate) return false;
-            if (filters.unit !== 'all' && item.unit !== filters.unit) return false;
+
+            // The unit and director dropdown filters are only applied for non-unit-director roles.
+            if (currentUserRole !== UserRole.Unidad) {
+                if (filters.unit.length > 0 && !filters.unit.includes(item.unit as Unit)) return false;
+                if (filters.director !== 'all' && item.director !== filters.director) return false;
+                if (filters.executive !== 'all' && item.executive !== filters.executive) return false;
+            }
+
             if (filters.status !== 'all' && item.status !== filters.status) return false;
             if (filters.client && !item.client.toLowerCase().includes(filters.client.toLowerCase())) return false;
             if (filters.orderNumber && !item.orderNumber.toLowerCase().includes(filters.orderNumber.toLowerCase())) return false;
@@ -47,21 +107,34 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, on
 
             return true;
         });
-    }, [data, filters]);
+    }, [data, filters, currentUserRole, currentUserUnit]);
 
     useEffect(() => {
         onFilteredDataChange(filteredData);
     }, [filteredData, onFilteredDataChange]);
 
+
     return (
         <main>
-            <SummaryCards data={filteredData} />
+            <SummaryCards 
+                data={filteredData}
+                currentUserRole={currentUserRole}
+                currentUserUnit={currentUserUnit}
+                subOrderFinancials={subOrderFinancials}
+            />
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mt-6 p-4">
-                <FilterControls filters={filters} setFilters={setFilters} />
+                <FilterControls 
+                    filters={filters} 
+                    setFilters={setFilters} 
+                    isUnitDirector={currentUserRole === UserRole.Unidad}
+                    directors={directors}
+                    executives={executives}
+                />
                 <OrderTable 
                     data={filteredData} 
                     onEdit={onEdit}
                     currentUserRole={currentUserRole}
+                    currentUserUnit={currentUserUnit}
                     onAddSubOrder={onAddSubOrder}
                 />
             </div>

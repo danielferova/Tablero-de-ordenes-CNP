@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Order, SubOrder, OrderStatus, UserRole } from '../types';
+import { Order, SubOrder, OrderStatus, UserRole, Unit } from '../types';
 import { PencilIcon } from './icons/PencilIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { PlusIcon } from './icons/PlusIcon';
@@ -11,6 +11,7 @@ interface OrderTableProps {
     data: FullOrderData[];
     onEdit: (subOrder: SubOrder, order: Order) => void;
     currentUserRole: UserRole;
+    currentUserUnit: Unit | null;
     onAddSubOrder: (order: Order) => void;
 }
 
@@ -18,7 +19,7 @@ interface OrderWithSubOrders extends Order {
     subOrders: SubOrder[];
 }
 
-const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, onAddSubOrder }) => {
+const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder }) => {
     const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
     const toggleOrder = (orderId: string) => {
@@ -53,9 +54,38 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
     };
     
     const canEdit = (subOrder: SubOrder) => {
-        if (currentUserRole === UserRole.Unidad) return true;
-        if (currentUserRole === UserRole.Finanzas) return subOrder.amount !== undefined && subOrder.amount !== null;
+        if (currentUserRole === UserRole.Unidad) {
+            // A unit director can edit IF it's their unit AND the task is still pending.
+            const isTheirUnit = subOrder.unit === currentUserUnit;
+            const isPending = subOrder.status === OrderStatus.Pendiente;
+            return isTheirUnit && isPending;
+        }
+        if (currentUserRole === UserRole.Finanzas) {
+            // Finance can always edit financials if an amount is set, regardless of status.
+            return subOrder.amount !== undefined && subOrder.amount !== null;
+        }
         return false;
+    };
+    
+    const getEditButtonTitle = (subOrder: SubOrder): string => {
+        if (currentUserRole === UserRole.Unidad) {
+            if (subOrder.unit !== currentUserUnit) {
+                return "No tiene permiso para editar tareas de otra unidad.";
+            }
+            if (subOrder.status !== OrderStatus.Pendiente) {
+                return "No se puede editar una tarea que ya ha sido facturada o cobrada.";
+            }
+        }
+        
+        if (canEdit(subOrder)) {
+            return "Editar tarea";
+        }
+
+        if (currentUserRole === UserRole.Finanzas && (subOrder.amount === undefined || subOrder.amount === null)) {
+             return "Finanzas solo puede editar si la unidad ha asignado un monto a la tarea.";
+        }
+
+        return "No tiene permiso para editar esta tarea";
     };
 
     const groupedData = useMemo(() => {
@@ -78,6 +108,10 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                     paymentMethod: item.paymentMethod,
                     invoiceTotalAmount: item.invoiceTotalAmount,
                     paidAmount: item.paidAmount,
+                    director: item.director,
+                    executive: item.executive,
+                    billingType: item.billingType,
+                    financialObservations: item.financialObservations,
                 };
             }
             if (!subOrdersMap[item.orderId]) {
@@ -102,8 +136,12 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Cliente</th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Fecha Creación</th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Monto Cotizado</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Monto Trabajos</th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Monto Facturado</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">No. Factura</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Fecha Factura</th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Monto Pagado</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Fecha Pago</th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Saldo Pendiente</th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Estado General</th>
                         <th scope="col" className="relative px-6 py-3">
@@ -142,8 +180,12 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{order.client}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDate(order.creationDate)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(order.quotedAmount)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(subOrdersTotal)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-700 dark:text-blue-300">{formatCurrency(order.invoiceTotalAmount)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{order.invoiceNumber || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDate(order.invoiceDate)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-700 dark:text-green-300">{formatCurrency(order.paidAmount)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDate(order.paymentDate)}</td>
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${balance > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}>{formatCurrency(balance)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                                       <div className="flex items-center gap-2">
@@ -153,7 +195,12 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         {currentUserRole === UserRole.Unidad && (
-                                            <button onClick={() => onAddSubOrder(order)} className="flex items-center text-sm bg-red-100 hover:bg-red-200 dark:bg-red-900/50 dark:hover:bg-red-900 text-brand-primary font-semibold py-1 px-3 rounded-md">
+                                            <button
+                                                onClick={() => onAddSubOrder(order)}
+                                                className="flex items-center text-sm bg-red-100 hover:bg-red-200 dark:bg-red-900/50 dark:hover:bg-red-900 text-brand-primary font-semibold py-1 px-3 rounded-md transition-colors disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed"
+                                                disabled={allCobrado}
+                                                title={allCobrado ? "No se pueden añadir tareas a una orden completada" : "Añadir Tarea"}
+                                            >
                                                 <PlusIcon className="w-4 h-4 mr-1.5" />
                                                 Añadir Tarea
                                             </button>
@@ -162,16 +209,37 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                 </tr>
                                 {isExpanded && (
                                     <tr>
-                                        <td colSpan={10} className="p-0 bg-gray-50/50 dark:bg-gray-900/50">
+                                        <td colSpan={14} className="p-0 bg-gray-50/50 dark:bg-gray-900/50">
                                             <div className="p-4 mx-4 my-2 border-l-4 border-brand-primary bg-white dark:bg-gray-800 rounded-r-lg">
-                                                <div className="flex justify-between items-baseline mb-3">
-                                                    <h4 className="font-semibold dark:text-white">Detalles de la Orden</h4>
-                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                                                        <span><span className="font-semibold">No. Factura:</span> {order.invoiceNumber || 'N/A'}</span>
-                                                        <span className="mx-2">|</span>
-                                                        <span><span className="font-semibold">Método:</span> {order.paymentMethod || 'N/A'}</span>
+                                                <div className="flex flex-col sm:flex-row justify-between sm:items-baseline mb-3 gap-2">
+                                                    <h4 className="font-semibold dark:text-white flex-shrink-0">Detalles de la Orden</h4>
+                                                    <div className="text-sm text-gray-800 dark:text-gray-200 flex flex-wrap justify-start sm:justify-end gap-x-4 gap-y-1">
+                                                        <div className="flex items-center">
+                                                            <span className="font-semibold text-gray-500 dark:text-gray-400 mr-1.5">Director:</span>
+                                                            <span>{order.director || 'N/A'}</span>
+                                                        </div>
+                                                        <div className="flex items-center">
+                                                            <span className="font-semibold text-gray-500 dark:text-gray-400 mr-1.5">Ejecutivo:</span>
+                                                            <span>{order.executive || 'N/A'}</span>
+                                                        </div>
+                                                        <div className="flex items-center">
+                                                            <span className="font-semibold text-gray-500 dark:text-gray-400 mr-1.5">Tipo Facturación:</span>
+                                                            <span>{order.billingType === 'perTask' ? 'Facturación por Tarea' : order.billingType === 'global' ? 'Facturación Global' : 'N/A'}</span>
+                                                        </div>
+                                                        <div className="flex items-center">
+                                                            <span className="font-semibold text-gray-500 dark:text-gray-400 mr-1.5">Método:</span>
+                                                            <span>{order.paymentMethod || 'N/A'}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                
+                                                {(currentUserRole === UserRole.Gerencia || currentUserRole === UserRole.Finanzas) && order.financialObservations && (
+                                                    <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-900/50 rounded-md border border-gray-200 dark:border-gray-700">
+                                                        <h5 className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Observaciones Financieras:</h5>
+                                                        <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{order.financialObservations}</p>
+                                                    </div>
+                                                )}
+
                                                 <table className="min-w-full">
                                                     <thead>
                                                       <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -200,8 +268,13 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusChipClass(subOrder.status)}`}>{subOrder.status}</span>
                                                                 </td>
                                                                 <td className="py-3 whitespace-nowrap text-right text-sm font-medium">
-                                                                    {(currentUserRole === UserRole.Unidad || currentUserRole === UserRole.Finanzas) && canEdit(subOrder) && (
-                                                                        <button onClick={() => onEdit(subOrder, order)} className="text-brand-primary hover:text-red-700 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                                                                    {(currentUserRole === UserRole.Unidad || currentUserRole === UserRole.Finanzas) && (
+                                                                        <button 
+                                                                            onClick={() => onEdit(subOrder, order)} 
+                                                                            className="text-brand-primary hover:text-red-700 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                            disabled={!canEdit(subOrder)}
+                                                                            title={getEditButtonTitle(subOrder)}
+                                                                        >
                                                                             <PencilIcon className="w-5 h-5"/>
                                                                         </button>
                                                                     )}
@@ -219,7 +292,7 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                     })}
                     {groupedData.length === 0 && (
                         <tr>
-                            <td colSpan={10} className="text-center py-10 text-gray-500 dark:text-gray-400">
+                            <td colSpan={14} className="text-center py-10 text-gray-500 dark:text-gray-400">
                                 No se encontraron resultados.
                             </td>
                         </tr>

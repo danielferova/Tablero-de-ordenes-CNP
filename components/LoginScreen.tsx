@@ -1,29 +1,50 @@
-import React, { useState } from 'react';
-import { UserRole } from '../types';
+
+import React, { useState, useEffect } from 'react';
+import { UserRole, Unit } from '../types';
 import { Logo } from './Logo';
+import * as db from '../services/database';
 
 interface LoginScreenProps {
-  onLogin: (role: UserRole) => void;
+  onLogin: (role: UserRole, unit?: Unit) => void;
+}
+
+interface UnitCredential {
+    name: Unit;
+    password: string;
 }
 
 // NOTE: Hardcoding passwords like this is insecure and for demonstration purposes only.
 // In a real application, use a proper authentication backend.
-const rolePasswords: { [key: string]: UserRole } = {
+const genericRolePasswords: { [key: string]: UserRole } = {
   'comercial123': UserRole.Comercial,
-  'unidad123': UserRole.Unidad,
   'finanzas123': UserRole.Finanzas,
   'gerencia123': UserRole.Gerencia,
 };
 
+
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [unitCredentials, setUnitCredentials] = useState<UnitCredential[]>([]);
+  
+  useEffect(() => {
+    // Listen to unit credentials from Firestore
+    const unsubscribe = db.listenToUnits((fetchedUnits) => {
+        setUnitCredentials(fetchedUnits);
+    });
+    // Cleanup listener on component unmount
+    return () => unsubscribe();
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const role = rolePasswords[password];
-    if (role) {
-      onLogin(role);
+    const genericRole = genericRolePasswords[password];
+    const unitCredential = unitCredentials.find(cred => cred.password === password);
+
+    if (genericRole) {
+      onLogin(genericRole);
+    } else if (unitCredential) {
+      onLogin(UserRole.Unidad, unitCredential.name);
     } else {
       setError('Contraseña incorrecta. Por favor, intente de nuevo.');
       setPassword('');

@@ -1,14 +1,21 @@
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { OrderStatus, Unit } from '../types';
 import { ALL_UNITS } from '../constants';
+import { ChevronDownIcon } from './icons/ChevronDownIcon';
 
 interface FilterControlsProps {
     filters: any;
     setFilters: (filters: any) => void;
+    isUnitDirector?: boolean;
+    directors: string[];
+    executives: string[];
 }
 
-const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters }) => {
+const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters, isUnitDirector = false, directors, executives }) => {
+    const [isUnitDropdownOpen, setUnitDropdownOpen] = useState(false);
+    const unitDropdownRef = useRef<HTMLDivElement>(null);
+
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFilters((prev: any) => ({ ...prev, [name]: value }));
@@ -21,9 +28,39 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters }) 
             dateRange: { ...prev.dateRange, [name]: value },
         }));
     };
+    
+    const handleUnitToggle = (unit: Unit) => {
+        setFilters((prev: any) => {
+            const newUnits = prev.unit.includes(unit)
+                ? prev.unit.filter((u: Unit) => u !== unit)
+                : [...prev.unit, unit];
+            return { ...prev, unit: newUnits };
+        });
+    };
+    
+    const handleSelectAllUnits = () => {
+        setFilters((prev: any) => ({ ...prev, unit: ALL_UNITS }));
+    };
+
+    const handleClearAllUnits = () => {
+        setFilters((prev: any) => ({ ...prev, unit: [] }));
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (unitDropdownRef.current && !unitDropdownRef.current.contains(event.target as Node)) {
+                setUnitDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4 p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 border-b border-gray-200 dark:border-gray-700">
             <input
                 type="text"
                 name="client"
@@ -48,14 +85,75 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters }) 
                 onChange={handleInputChange}
                 className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
             />
+            {!isUnitDirector && (
+                 <select
+                    name="director"
+                    value={filters.director}
+                    onChange={handleInputChange}
+                    className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                >
+                    <option value="all">Todos los Directores</option>
+                    {directors.map(director => <option key={director} value={director}>{director}</option>)}
+                </select>
+            )}
+            {!isUnitDirector && (
+                 <select
+                    name="executive"
+                    value={filters.executive}
+                    onChange={handleInputChange}
+                    className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                >
+                    <option value="all">Todos los Ejecutivos</option>
+                    {executives.map(executive => <option key={executive} value={executive}>{executive}</option>)}
+                </select>
+            )}
+            {!isUnitDirector && (
+                <div className="relative" ref={unitDropdownRef}>
+                    <button
+                        type="button"
+                        onClick={() => setUnitDropdownOpen(prev => !prev)}
+                        className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-left flex justify-between items-center"
+                    >
+                        <span className="truncate">
+                            {filters.unit.length === 0 ? 'Todas las Unidades' : 
+                             filters.unit.length === 1 ? filters.unit[0] :
+                             `${filters.unit.length} Unidades Seleccionadas`}
+                        </span>
+                        <ChevronDownIcon className={`w-5 h-5 transition-transform ${isUnitDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isUnitDropdownOpen && (
+                        <div className="absolute z-20 w-72 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+                            <div className="p-2 flex justify-between border-b border-gray-200 dark:border-gray-700">
+                                <button onClick={handleSelectAllUnits} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Todas</button>
+                                <button onClick={handleClearAllUnits} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Limpiar</button>
+                            </div>
+                            <div className="max-h-60 overflow-y-auto p-1">
+                                {ALL_UNITS.map(unit => (
+                                    <label key={unit} className="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 text-brand-primary focus:ring-brand-primary border-gray-300 rounded"
+                                            checked={filters.unit.includes(unit)}
+                                            onChange={() => handleUnitToggle(unit)}
+                                        />
+                                        <span className="text-sm text-gray-700 dark:text-gray-300">{unit}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
             <select
-                name="unit"
-                value={filters.unit}
+                name="overallStatus"
+                value={filters.overallStatus}
                 onChange={handleInputChange}
                 className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
             >
-                <option value="all">Todas las Unidades</option>
-                {ALL_UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                <option value="all">Estado de Orden (Todos)</option>
+                <option value="Pendiente">Pendiente</option>
+                <option value="En Progreso">En Progreso</option>
+                <option value="Completado">Completado</option>
             </select>
             <select
                 name="status"
@@ -63,10 +161,10 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters }) 
                 onChange={handleInputChange}
                 className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
             >
-                <option value="all">Todos los Estados</option>
+                <option value="all">Estado de Tarea (Todos)</option>
                 {Object.values(OrderStatus).map(status => <option key={status} value={status}>{status}</option>)}
             </select>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 lg:col-span-2">
                 <input
                     type="date"
                     name="start"

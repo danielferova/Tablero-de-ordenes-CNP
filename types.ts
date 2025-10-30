@@ -1,12 +1,14 @@
 // types.ts
 export enum Unit {
   SuperImpresiones = "Super Impresiones",
-  PublicidadMovimiento = "Publicidad y Movimiento",
+  PublicidadMovimiento = "Publicidad en Movimiento",
   Publiest = "Publiest",
-  CNPAgencia = "CNP La Agencia",
-  Dmetal = "Dmetal",
+  CNPAgencia = "CNP Lagencia",
+  Dmetal = "D'Metal",
   PautaPuntual = "Pauta Puntual",
-  FabricaVendedores = "Fabrica de Vendedores",
+  FabricaVendedores = "Fábrica de vendedores",
+  SIPaseoLasAmericas = "SI Paseo Las Américas",
+  Proveedores = "Proveedores",
 }
 
 export enum PaymentMethod {
@@ -26,6 +28,18 @@ export enum UserRole {
     Unidad = "Director de Unidad",
     Finanzas = "Finanzas",
     Gerencia = "Gerencia",
+}
+
+export interface FinancialMovement {
+  id: string;
+  subOrderId?: string; // Can be linked to a sub-order
+  orderId?: string; // Or directly to an order
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  invoiceAmount?: number;
+  paymentDate?: string;
+  paidAmount?: number;
+  creationDate: string;
 }
 
 export interface SubOrder {
@@ -56,4 +70,8 @@ export interface Order {
   paymentMethod?: PaymentMethod;
   invoiceTotalAmount?: number;
   paidAmount?: number; // New field for paid amount
+  executive?: string; // New field for the executive in charge
+  director?: string; // New field for the director in charge
+  billingType?: 'perTask' | 'global';
+  financialObservations?: string;
 }

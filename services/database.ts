@@ -238,27 +238,28 @@ export async function createSubOrder(subOrderData: Omit<SubOrder, 'id'>): Promis
 
 
 export async function updateSubOrder(updatedSubOrder: SubOrder): Promise<SubOrder> {
-    const { id, ...data } = updatedSubOrder;
+    const { id } = updatedSubOrder;
     const subOrderDocRef = doc(db, 'subOrders', id);
 
-    // Sanitize the object to prevent `undefined` values, which Firestore rejects.
-    // This creates a new object containing only the fields that are valid for a SubOrder,
-    // preventing errors when a merged object (like FullOrderData) is passed in.
-    const cleanData = {
-      orderId: data.orderId,
-      subOrderNumber: data.subOrderNumber,
-      unit: data.unit,
-      workType: data.workType,
-      description: data.description,
-      amount: data.amount ?? null, // Coalesce undefined/null to null
-      observations: data.observations ?? null, // Coalesce undefined/null to null
-      status: data.status,
-      creationDate: data.creationDate,
+    // Create a new, clean object with only SubOrder properties.
+    // This explicitly handles cases where a merged object (like FullOrderData) is passed in,
+    // preventing circular structure errors when sending data to Firestore.
+    const cleanData: Omit<SubOrder, 'id'> = {
+      orderId: updatedSubOrder.orderId,
+      subOrderNumber: updatedSubOrder.subOrderNumber,
+      unit: updatedSubOrder.unit,
+      workType: updatedSubOrder.workType,
+      description: updatedSubOrder.description,
+      amount: updatedSubOrder.amount ?? null,
+      observations: updatedSubOrder.observations ?? null,
+      status: updatedSubOrder.status,
+      creationDate: updatedSubOrder.creationDate,
     };
 
-    // The type assertion is needed because updateDoc has a generic signature.
-    await updateDoc(subOrderDocRef, cleanData as { [x: string]: any });
-    return updatedSubOrder;
+    await updateDoc(subOrderDocRef, cleanData);
+
+    // Return a new object combining the ID and the clean data, ensuring no circular refs are returned.
+    return { id, ...cleanData };
 }
 
 export async function updateOrderFinances(

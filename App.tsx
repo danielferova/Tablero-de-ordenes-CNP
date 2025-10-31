@@ -16,6 +16,7 @@ import * as db from './services/database';
 import { BellIcon } from './components/icons/BellIcon';
 import NotificationsPanel from './components/NotificationsPanel';
 import { UNIT_CONTACTS } from './constants';
+import NotifyPaymentModal, { PaymentNotificationDetails } from './components/NotifyPaymentModal';
 
 // Helper functions to create clean, plain JavaScript objects from complex Firestore objects.
 // This prevents "Converting circular structure to JSON" errors when setting state for modals or dev tools.
@@ -90,9 +91,11 @@ const App: React.FC = () => {
     const [isEditSubOrderModalOpen, setEditSubOrderModalOpen] = useState(false);
     const [isEditOrderModalOpen, setEditOrderModalOpen] = useState(false);
     const [isAddSubOrderModalOpen, setAddSubOrderModalOpen] = useState(false);
+    const [isNotifyPaymentModalOpen, setNotifyPaymentModalOpen] = useState(false);
     const [editingSubOrderContext, setEditingSubOrderContext] = useState<{ subOrder: SubOrder; parentOrder: Order; siblingSubOrders: SubOrder[] } | null>(null);
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     const [parentOrderForNewSub, setParentOrderForNewSub] = useState<Order | null>(null);
+    const [orderForPaymentNotification, setOrderForPaymentNotification] = useState<Order | null>(null);
     const [toastNotification, setToastNotification] = useState<{ title: string; message: string; whatsappLink: string; } | null>(null);
     const [filteredDataForExport, setFilteredDataForExport] = useState<FullOrderData[]>([]);
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -376,6 +379,80 @@ const App: React.FC = () => {
             triggerNotification("Error", "No se pudo añadir la nueva tarea.", "Error al añadir tarea.", {roleTarget: []});
         }
     };
+
+    const handleNotifyPaymentClick = (order: Order) => {
+        setOrderForPaymentNotification(cleanOrder(order));
+        setNotifyPaymentModalOpen(true);
+    };
+
+    const handleSendPaymentNotification = (order: Order, payments: PaymentNotificationDetails[], clientEmail: string) => {
+        const formatCurrency = (value: number | null | undefined) => {
+            if (value === null || value === undefined) return 'N/A';
+            return new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(value);
+        };
+    
+        const paymentDetailsText = payments.map((p, index) => {
+            let details = `*Detalles de Notificación #${index + 1}:*\n\n` +
+                          `Razón Social: ${p.businessName}\n` +
+                          `NIT: ${p.taxId}\n` +
+                          `Dirección: ${p.address}\n` +
+                          `Descripción: ${p.description}\n\n`;
+    
+            let actions = '*Acciones Requeridas:*\n';
+            let hasAction = false;
+    
+            if (p.invoiceAmount) {
+                actions += `  - *Generar Factura:*\n    Monto: *${formatCurrency(p.invoiceAmount)}*\n`;
+                hasAction = true;
+            }
+            if (p.paidAmount && p.date) {
+                actions += `  - *Registrar Pago:*\n    Monto: *${formatCurrency(p.paidAmount)}*\n    Fecha: ${p.date}\n`;
+                hasAction = true;
+            }
+    
+            if (!hasAction) {
+                actions = '*No se especificaron acciones monetarias.*\n';
+            }
+    
+            return details + actions;
+        }).join('\n---\n\n');
+    
+        const message = `El Director Comercial ha reportado la siguiente información para la orden *${order.orderNumber} (${order.client})*:\n\n` +
+                        `*Correo del cliente para entrega:*\n${clientEmail}\n\n` +
+                        `---\n\n` +
+                        `${paymentDetailsText}\n\n` +
+                        `Por favor, genere la factura y/o registre el pago según corresponda.`;
+    
+        const whatsappPaymentDetails = payments.map((p, index) => {
+            let details = `*Notificación #${index + 1}:*\n` +
+                          `Razón Social: ${p.businessName}\n` +
+                          `NIT: ${p.taxId}\n`;
+            if (p.invoiceAmount) {
+                details += `Monto a Facturar: ${formatCurrency(p.invoiceAmount)}\n`;
+            }
+            if (p.paidAmount) {
+                details += `Monto Pagado: ${formatCurrency(p.paidAmount)}\n`;
+            }
+            return details;
+        }).join('\n');
+    
+        const whatsappMessage = `*[INFO FACTURA/PAGO: ${order.orderNumber} - ${order.client}]*\n\n` +
+                               `El Dir. Comercial ha enviado información.\n` +
+                               `Correo de entrega: ${clientEmail}\n\n` +
+                               `${whatsappPaymentDetails}\n\n` +
+                               `Favor revisar el tablero para más detalles y proceder.`;
+    
+        triggerNotification(
+            `Info. Factura/Pago - ${order.orderNumber}`,
+            message,
+            whatsappMessage,
+            { roleTarget: [UserRole.Finanzas, UserRole.Gerencia] }
+        );
+    
+        setNotifyPaymentModalOpen(false);
+        setOrderForPaymentNotification(null);
+    };
+    
 
     const subOrderFinancials = useMemo(() => {
         const invoicedMap = new Map<string, number>();
@@ -670,6 +747,7 @@ const App: React.FC = () => {
                     currentUserUnit={currentUserUnit}
                     onAddSubOrder={handleAddSubOrderClick}
                     onFilteredDataChange={setFilteredDataForExport}
+                    onNotifyPayment={handleNotifyPaymentClick}
                     subOrderFinancials={subOrderFinancials}
                     directors={directors}
                     executives={executives}
@@ -711,6 +789,13 @@ const App: React.FC = () => {
                     order={parentOrderForNewSub}
                     onClose={() => setAddSubOrderModalOpen(false)}
                     onSubmit={handleCreateSubOrder}
+                />
+            )}
+            {isNotifyPaymentModalOpen && orderForPaymentNotification && (
+                <NotifyPaymentModal
+                    order={orderForPaymentNotification}
+                    onClose={() => setNotifyPaymentModalOpen(false)}
+                    onSubmit={handleSendPaymentNotification}
                 />
             )}
             {toastNotification && (

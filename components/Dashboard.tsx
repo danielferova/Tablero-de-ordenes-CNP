@@ -13,12 +13,13 @@ interface DashboardProps {
     currentUserUnit: Unit | null;
     onAddSubOrder: (order: Order) => void;
     onFilteredDataChange: (data: FullOrderData[]) => void;
+    onNotifyPayment: (order: Order) => void;
     subOrderFinancials: { paidPerSubOrder: Map<string, number> };
     directors: string[];
     executives: string[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onFilteredDataChange, subOrderFinancials, directors, executives }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onFilteredDataChange, onNotifyPayment, subOrderFinancials, directors, executives }) => {
     const [filters, setFilters] = useState<{
         unit: Unit[];
         status: string;
@@ -136,6 +137,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
                     currentUserRole={currentUserRole}
                     currentUserUnit={currentUserUnit}
                     onAddSubOrder={onAddSubOrder}
+                    onNotifyPayment={onNotifyPayment}
                 />
             </div>
         </main>

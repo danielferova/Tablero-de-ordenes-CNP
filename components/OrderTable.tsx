@@ -4,6 +4,7 @@ import { PencilIcon } from './icons/PencilIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { WarningIcon } from './icons/WarningIcon';
+import { PaymentIcon } from './icons/PaymentIcon';
 
 interface FullOrderData extends Order, SubOrder {}
 
@@ -13,13 +14,14 @@ interface OrderTableProps {
     currentUserRole: UserRole;
     currentUserUnit: Unit | null;
     onAddSubOrder: (order: Order) => void;
+    onNotifyPayment: (order: Order) => void;
 }
 
 interface OrderWithSubOrders extends Order {
     subOrders: SubOrder[];
 }
 
-const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder }) => {
+const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onNotifyPayment }) => {
     const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
     const toggleOrder = (orderId: string) => {
@@ -155,6 +157,7 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                         
                         const allCobrado = order.subOrders.length > 0 && order.subOrders.every(so => so.status === OrderStatus.Cobrado);
                         const allPendiente = order.subOrders.every(so => so.status === OrderStatus.Pendiente);
+                        const isOrderFinanciallyActive = order.subOrders.some(so => so.status === OrderStatus.Facturado || so.status === OrderStatus.Cobrado);
 
                         let overallStatusText;
                         if (allCobrado) overallStatusText = "Completado";
@@ -193,16 +196,26 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                         {showWarning && <WarningIcon className="w-5 h-5 text-yellow-500" title="Los montos (cotizado, tareas, factura, pagado) no coinciden." />}
                                       </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                                         {currentUserRole === UserRole.Unidad && (
                                             <button
                                                 onClick={() => onAddSubOrder(order)}
-                                                className="flex items-center text-sm bg-red-100 hover:bg-red-200 dark:bg-red-900/50 dark:hover:bg-red-900 text-brand-primary font-semibold py-1 px-3 rounded-md transition-colors disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed"
-                                                disabled={allCobrado}
-                                                title={allCobrado ? "No se pueden añadir tareas a una orden completada" : "Añadir Tarea"}
+                                                className="inline-flex items-center text-sm bg-red-100 hover:bg-red-200 dark:bg-red-900/50 dark:hover:bg-red-900 text-brand-primary font-semibold py-1 px-3 rounded-md transition-colors disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed"
+                                                disabled={isOrderFinanciallyActive}
+                                                title={isOrderFinanciallyActive ? "No se pueden añadir tareas a una orden que ya está en proceso de facturación o ha sido cobrada." : "Añadir Tarea"}
                                             >
                                                 <PlusIcon className="w-4 h-4 mr-1.5" />
                                                 Añadir Tarea
+                                            </button>
+                                        )}
+                                         {currentUserRole === UserRole.Comercial && (
+                                            <button
+                                                onClick={() => onNotifyPayment(order)}
+                                                className="inline-flex items-center text-sm bg-green-100 hover:bg-green-200 dark:bg-green-900/50 dark:hover:bg-green-900 text-green-800 dark:text-green-300 font-semibold py-1 px-3 rounded-md transition-colors"
+                                                title="Notificar pago a Finanzas"
+                                            >
+                                                <PaymentIcon className="w-4 h-4 mr-1.5" />
+                                                Notificar Pago
                                             </button>
                                         )}
                                     </td>
@@ -240,29 +253,29 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                                     </div>
                                                 )}
 
-                                                <table className="min-w-full">
+                                                <table className="w-full table-fixed">
                                                     <thead>
                                                       <tr className="border-b border-gray-200 dark:border-gray-700">
-                                                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Suborden</th>
-                                                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha Creación</th>
-                                                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Unidad</th>
-                                                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo Trabajo</th>
-                                                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Descripción</th>
-                                                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Observaciones</th>
-                                                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Monto</th>
-                                                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
-                                                        <th className="relative py-2"><span className="sr-only">Edit</span></th>
+                                                        <th className="w-[10%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Suborden</th>
+                                                        <th className="w-[10%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha Creación</th>
+                                                        <th className="w-[15%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Unidad</th>
+                                                        <th className="w-[10%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo Trabajo</th>
+                                                        <th className="w-[25%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Descripción</th>
+                                                        <th className="w-[15%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Observaciones</th>
+                                                        <th className="w-[5%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Monto</th>
+                                                        <th className="w-[5%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
+                                                        <th className="relative py-2 w-[5%]"><span className="sr-only">Edit</span></th>
                                                       </tr>
                                                     </thead>
                                                     <tbody>
                                                         {order.subOrders.map(subOrder => (
                                                             <tr key={subOrder.id} className="border-b border-gray-100 dark:border-gray-700/50 last:border-b-0">
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{subOrder.subOrderNumber}</td>
+                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate">{subOrder.subOrderNumber}</td>
                                                                 <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDate(subOrder.creationDate)}</td>
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{subOrder.unit}</td>
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{subOrder.workType}</td>
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate max-w-xs">{subOrder.description}</td>
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate max-w-xs">{subOrder.observations || 'N/A'}</td>
+                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate">{subOrder.unit}</td>
+                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate">{subOrder.workType}</td>
+                                                                <td className="py-3 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words text-justify">{subOrder.description}</td>
+                                                                <td className="py-3 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words text-justify">{subOrder.observations || 'N/A'}</td>
                                                                 <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatCurrency(subOrder.amount)}</td>
                                                                 <td className="py-3 whitespace-nowrap">
                                                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusChipClass(subOrder.status)}`}>{subOrder.status}</span>

@@ -1,5 +1,9 @@
 
 
+
+
+
+
 import { Order, SubOrder, Unit, PaymentMethod, OrderStatus, FinancialMovement } from '../types';
 import { initializeApp } from 'firebase/app';
 import {
@@ -97,6 +101,7 @@ export function listenToData(callback: (data: { orders: Order[], subOrders: SubO
                 workType: data.workType,
                 description: data.description,
                 amount: data.amount ?? null,
+                budgetedAmount: data.budgetedAmount ?? null,
                 observations: data.observations || null,
                 status: data.status,
                 creationDate: data.creationDate,
@@ -191,7 +196,7 @@ export async function createClient(name: string): Promise<void> {
 
 export async function createOrder(
     orderData: { client: string; description: string; workType: string; quotedAmount: number; paymentMethod: PaymentMethod; director: string; executive: string; billingType: 'perTask' | 'global'; },
-    units: Unit[]
+    unitsWithAmounts: { unit: Unit, amount?: number }[]
 ): Promise<{ newOrder: Order, newSubOrders: SubOrder[] }> {
     const ordersSnapshot = await getDocs(query(ordersCollection));
     const orderCount = ordersSnapshot.size;
@@ -211,15 +216,17 @@ export async function createOrder(
     const batch = writeBatch(db);
     const newSubOrders: SubOrder[] = [];
 
-    units.forEach((unit, index) => {
+    unitsWithAmounts.forEach((assignment, index) => {
         const subOrderData: Omit<SubOrder, 'id'> = {
             orderId: newOrder.id,
             subOrderNumber: `${newOrderNumber}-${index + 1}`,
-            unit,
+            unit: assignment.unit,
             status: OrderStatus.Pendiente,
             workType: orderData.workType,
             description: orderData.description,
             creationDate: currentDate,
+            amount: assignment.amount, // Assign amount if provided
+            budgetedAmount: assignment.amount, // Also save it as the initial budget
         };
         const subOrderDocRef = doc(subOrdersCollection);
         batch.set(subOrderDocRef, subOrderData);
@@ -251,12 +258,13 @@ export async function updateSubOrder(updatedSubOrder: SubOrder): Promise<SubOrde
       workType: updatedSubOrder.workType,
       description: updatedSubOrder.description,
       amount: updatedSubOrder.amount ?? null,
+      budgetedAmount: updatedSubOrder.budgetedAmount ?? null,
       observations: updatedSubOrder.observations ?? null,
       status: updatedSubOrder.status,
       creationDate: updatedSubOrder.creationDate,
     };
 
-    await updateDoc(subOrderDocRef, cleanData);
+    await updateDoc(subOrderDocRef, cleanData as { [key: string]: any });
 
     // Return a new object combining the ID and the clean data, ensuring no circular refs are returned.
     return { id, ...cleanData };
@@ -290,12 +298,33 @@ export async function updateOrderFinances(
     movementsToUpdate.forEach(movement => {
         const { id: movementId, ...movementData } = movement;
         const movementDocRef = doc(db, 'financialMovements', movementId);
-        batch.update(movementDocRef, movementData);
+        batch.update(movementDocRef, movementData as { [key: string]: any });
     });
     
     movementsToDelete.forEach(movement => {
         const movementDocRef = doc(db, 'financialMovements', movement.id);
         batch.delete(movementDocRef);
+    });
+
+    await batch.commit();
+}
+
+export async function updateOrderBudgets(
+    orderId: string, 
+    newQuotedAmount: number, 
+    subOrdersToUpdate: { id: string; budgetedAmount: number; amount: number }[]
+): Promise<void> {
+    const batch = writeBatch(db);
+
+    const orderDocRef = doc(db, 'orders', orderId);
+    batch.update(orderDocRef, { quotedAmount: newQuotedAmount });
+
+    subOrdersToUpdate.forEach(so => {
+        const subOrderDocRef = doc(db, 'subOrders', so.id);
+        batch.update(subOrderDocRef, { 
+            budgetedAmount: so.budgetedAmount,
+            amount: so.amount 
+        });
     });
 
     await batch.commit();

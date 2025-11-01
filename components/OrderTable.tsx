@@ -5,23 +5,25 @@ import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { WarningIcon } from './icons/WarningIcon';
 import { PaymentIcon } from './icons/PaymentIcon';
+import { WrenchIcon } from './icons/WrenchIcon';
 
 interface FullOrderData extends Order, SubOrder {}
 
 interface OrderTableProps {
     data: FullOrderData[];
-    onEdit: (subOrder: SubOrder, order: Order) => void;
+    onEdit: (subOrderId: string, orderId: string) => void;
     currentUserRole: UserRole;
     currentUserUnit: Unit | null;
     onAddSubOrder: (order: Order) => void;
     onNotifyPayment: (order: Order) => void;
+    onAdjustBudget: (order: Order) => void;
 }
 
 interface OrderWithSubOrders extends Order {
     subOrders: SubOrder[];
 }
 
-const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onNotifyPayment }) => {
+const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onNotifyPayment, onAdjustBudget }) => {
     const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
     const toggleOrder = (orderId: string) => {
@@ -119,7 +121,22 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
             if (!subOrdersMap[item.orderId]) {
                 subOrdersMap[item.orderId] = [];
             }
-            subOrdersMap[item.orderId].push(item);
+            
+            // FIX: Explicitly create a SubOrder object to avoid type mismatches.
+            const subOrder: SubOrder = {
+                id: item.id,
+                orderId: item.orderId,
+                subOrderNumber: item.subOrderNumber,
+                unit: item.unit,
+                workType: item.workType,
+                description: item.description,
+                amount: item.amount,
+                budgetedAmount: item.budgetedAmount,
+                observations: item.observations,
+                status: item.status,
+                creationDate: item.creationDate,
+            };
+            subOrdersMap[item.orderId].push(subOrder);
         });
 
         return Object.values(ordersMap).map(order => {
@@ -165,6 +182,8 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                         else overallStatusText = "En Progreso";
                         
                         const subOrdersTotal = order.subOrders.reduce((sum, so) => sum + (so.amount || 0), 0);
+                        const hasWorkAmountDiscrepancy = Math.abs(subOrdersTotal - (order.quotedAmount || 0)) > 0.01;
+
                         const definedAmounts = [order.quotedAmount, subOrdersTotal, order.invoiceTotalAmount, order.paidAmount].filter(a => typeof a === 'number');
                         const allAmountsMatch = new Set(definedAmounts).size <= 1;
                         const showWarning = definedAmounts.length > 1 && !allAmountsMatch;
@@ -183,7 +202,7 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{order.client}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDate(order.creationDate)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(order.quotedAmount)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(subOrdersTotal)}</td>
+                                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-purple-600 dark:text-purple-400 ${hasWorkAmountDiscrepancy ? 'text-red-600 dark:text-red-400' : ''}`}>{formatCurrency(subOrdersTotal)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-700 dark:text-blue-300">{formatCurrency(order.invoiceTotalAmount)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{order.invoiceNumber || 'N/A'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDate(order.invoiceDate)}</td>
@@ -197,6 +216,16 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                        {currentUserRole === UserRole.Comercial && hasWorkAmountDiscrepancy && (
+                                            <button
+                                                onClick={() => onAdjustBudget(order)}
+                                                className="inline-flex items-center text-sm bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/50 dark:hover:bg-yellow-900 text-yellow-800 dark:text-yellow-300 font-semibold py-1 px-3 rounded-md transition-colors"
+                                                title="Ajustar presupuestos de la orden"
+                                            >
+                                                <WrenchIcon className="w-4 h-4 mr-1.5" />
+                                                Ajustar
+                                            </button>
+                                        )}
                                         {currentUserRole === UserRole.Unidad && (
                                             <button
                                                 onClick={() => onAddSubOrder(order)}
@@ -283,7 +312,7 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                                                 <td className="py-3 whitespace-nowrap text-right text-sm font-medium">
                                                                     {(currentUserRole === UserRole.Unidad || currentUserRole === UserRole.Finanzas) && (
                                                                         <button 
-                                                                            onClick={() => onEdit(subOrder, order)} 
+                                                                            onClick={() => onEdit(subOrder.id, order.id)} 
                                                                             className="text-brand-primary hover:text-red-700 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                                             disabled={!canEdit(subOrder)}
                                                                             title={getEditButtonTitle(subOrder)}

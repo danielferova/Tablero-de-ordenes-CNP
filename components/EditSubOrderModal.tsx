@@ -25,15 +25,21 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
     });
     const [formError, setFormError] = useState<string | null>(null);
 
-    const availableBudget = useMemo(() => {
-        const quotedAmount = parentOrder.quotedAmount || 0;
-        const otherSubOrdersAmount = siblingSubOrders
-            .filter(so => so.id !== subOrder.id)
-            .reduce((sum, so) => sum + (so.amount || 0), 0);
-        
-        const budget = quotedAmount - otherSubOrdersAmount;
-        return budget < 0 ? 0 : budget;
-    }, [parentOrder.quotedAmount, siblingSubOrders, subOrder.id]);
+    // Determine the effective budget for display and comparison.
+    const effectiveBudget = useMemo(() => {
+        // A specific budget was assigned (>0), so that's the source of truth.
+        if (subOrder.budgetedAmount && subOrder.budgetedAmount > 0) {
+            return subOrder.budgetedAmount;
+        }
+        // No specific budget was set, but it's the only task in the order.
+        // In this case, the budget is inferred to be the total quoted amount for the order.
+        if (siblingSubOrders.length === 1) {
+            return parentOrder.quotedAmount ?? 0;
+        }
+        // Default to the stored value (likely 0) if there are multiple tasks and no specific budget.
+        return subOrder.budgetedAmount || 0;
+    }, [subOrder.budgetedAmount, parentOrder.quotedAmount, siblingSubOrders.length]);
+
 
     useEffect(() => {
         setFormData({
@@ -48,15 +54,7 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
         const { name, value } = e.target;
         
         setFormData(prev => ({ ...prev, [name]: value }));
-
-        if (name === 'amount') {
-            const newAmount = parseFloat(value);
-            if (!isNaN(newAmount) && newAmount > availableBudget) {
-                setFormError(`El monto no puede exceder el presupuesto disponible de ${formatCurrency(availableBudget)}.`);
-            } else {
-                setFormError(null);
-            }
-        }
+        setFormError(null); // Clear previous non-budget related errors on change
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -73,10 +71,6 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
             setFormError('El monto no puede ser negativo.');
             return;
         }
-        if (amountValue > availableBudget) {
-            setFormError(`El monto excede el presupuesto disponible de ${formatCurrency(availableBudget)}.`);
-            return;
-        }
 
         const updatedSubOrder: SubOrder = {
             ...subOrder,
@@ -85,8 +79,20 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
             amount: amountValue,
             observations: formData.observations,
         };
+
+        // If the budget was inferred because it was missing on a single-task order,
+        // this is a good opportunity to correct the data in the database.
+        const hasOriginalBudget = subOrder.budgetedAmount && subOrder.budgetedAmount > 0;
+        if (!hasOriginalBudget && siblingSubOrders.length === 1) {
+            updatedSubOrder.budgetedAmount = parentOrder.quotedAmount;
+        }
+        
         onSubmit(updatedSubOrder);
     };
+    
+    // Calculate the difference between the current input and the effective budget for real-time feedback.
+    const currentAmount = parseFloat(formData.amount) || 0;
+    const difference = currentAmount - effectiveBudget;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
@@ -107,21 +113,31 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción de Tarea</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción de Tarea (Asignada por Dir. Comercial)</label>
                             <textarea
                                 name="description"
                                 value={formData.description}
-                                onChange={handleChange}
                                 rows={3}
-                                className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                required
+                                className="mt-1 w-full p-2 bg-gray-100 dark:bg-gray-700/50 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none cursor-not-allowed"
+                                readOnly
+                                disabled
                             />
+                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                La descripción de la tarea es asignada por el Director Comercial y no puede ser modificada.
+                            </p>
+                        </div>
+                        <div className="p-3 mb-2 bg-blue-50 dark:bg-blue-900/30 rounded-md border border-blue-200 dark:border-blue-800">
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="font-semibold text-blue-800 dark:text-blue-200">Presupuesto asignado a esta tarea:</span>
+                                <span className="font-bold text-blue-900 dark:text-blue-100">{formatCurrency(effectiveBudget)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm mt-1">
+                                <span className="text-gray-600 dark:text-gray-400">Monto total cotizado para la orden:</span>
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">{formatCurrency(parentOrder.quotedAmount)}</span>
+                            </div>
                         </div>
                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto (Q)</label>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                                Presupuesto disponible para esta tarea: {formatCurrency(availableBudget)}
-                            </p>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto de Tarea (Editable por Unidad)</label>
                             <input
                                 type="number"
                                 name="amount"
@@ -132,6 +148,18 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
                                 step="0.01"
                                 min="0"
                             />
+                            {/* Discrepancy/Surplus Indicator */}
+                            {Math.abs(difference) > 0.01 && (
+                                <div className={`mt-2 p-2 rounded-md text-sm flex items-start ${difference > 0 ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300' : 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300'}`}>
+                                    <WarningIcon className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-semibold">
+                                            {difference > 0 ? 'Excedente' : 'Discrepancia'}: {formatCurrency(Math.abs(difference))}
+                                        </p>
+                                        <p className="text-xs">Se notificará al Director Comercial sobre este ajuste para su revisión.</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                          <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones</label>

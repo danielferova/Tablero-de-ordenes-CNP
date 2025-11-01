@@ -17,6 +17,7 @@ import { BellIcon } from './components/icons/BellIcon';
 import NotificationsPanel from './components/NotificationsPanel';
 import { UNIT_CONTACTS } from './constants';
 import NotifyPaymentModal, { PaymentNotificationDetails } from './components/NotifyPaymentModal';
+import AdjustBudgetModal from './components/AdjustBudgetModal';
 
 // Helper functions to create clean, plain JavaScript objects from complex Firestore objects.
 // This prevents "Converting circular structure to JSON" errors when setting state for modals or dev tools.
@@ -28,6 +29,7 @@ const cleanSubOrder = (so: SubOrder): SubOrder => ({
     workType: so.workType,
     description: so.description,
     amount: so.amount,
+    budgetedAmount: so.budgetedAmount,
     observations: so.observations,
     status: so.status,
     creationDate: so.creationDate,
@@ -92,10 +94,12 @@ const App: React.FC = () => {
     const [isEditOrderModalOpen, setEditOrderModalOpen] = useState(false);
     const [isAddSubOrderModalOpen, setAddSubOrderModalOpen] = useState(false);
     const [isNotifyPaymentModalOpen, setNotifyPaymentModalOpen] = useState(false);
+    const [isAdjustBudgetModalOpen, setAdjustBudgetModalOpen] = useState(false);
     const [editingSubOrderContext, setEditingSubOrderContext] = useState<{ subOrder: SubOrder; parentOrder: Order; siblingSubOrders: SubOrder[] } | null>(null);
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     const [parentOrderForNewSub, setParentOrderForNewSub] = useState<Order | null>(null);
     const [orderForPaymentNotification, setOrderForPaymentNotification] = useState<Order | null>(null);
+    const [adjustingBudgetContext, setAdjustingBudgetContext] = useState<{ order: Order; subOrders: SubOrder[] } | null>(null);
     const [toastNotification, setToastNotification] = useState<{ title: string; message: string; whatsappLink: string; } | null>(null);
     const [filteredDataForExport, setFilteredDataForExport] = useState<FullOrderData[]>([]);
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -180,7 +184,7 @@ const App: React.FC = () => {
 
     const handleCreateOrder = async (
         orderData: { client: string; description: string; workType: string; quotedAmount: number; paymentMethod: PaymentMethod; director: string; executive: string; billingType: 'perTask' | 'global'; }, 
-        units: Unit[],
+        unitsWithAmounts: { unit: Unit, amount?: number }[],
         isNewClient: boolean
     ) => {
         try {
@@ -188,10 +192,11 @@ const App: React.FC = () => {
                 await db.createClient(orderData.client);
             }
 
-            const { newOrder } = await db.createOrder(orderData, units);
+            const { newOrder } = await db.createOrder(orderData, unitsWithAmounts);
             setNewOrderModalOpen(false);
             
-            // New logic for more specific and cleaner notifications
+            const units = unitsWithAmounts.map(u => u.unit);
+            
             const unitDetails = units.map(u => `• *${u}*`).join('\n');
             
             const assignmentText = units.length === 1 
@@ -200,7 +205,6 @@ const App: React.FC = () => {
             
             const whatsappMessage = `*[NUEVA ORDEN: ${newOrder.orderNumber}]*\n\nSe ha creado una nueva orden para el cliente *${orderData.client}*.\n\n${assignmentText}\n${unitDetails}\n\nPor favor, revisar el tablero para más detalles.`;
 
-            // The toast message is now also more descriptive.
             const toastMessage = units.length === 1
                 ? `La orden ${newOrder.orderNumber} ha sido creada para ${orderData.client}, con una tarea para ${units[0]}.`
                 : `La orden ${newOrder.orderNumber} ha sido creada para ${orderData.client}, con tareas para ${units.length} unidades.`;
@@ -218,19 +222,93 @@ const App: React.FC = () => {
 
     const handleUpdateSubOrder = async (updatedSubOrder: SubOrder) => {
         try {
-            await db.updateSubOrder(updatedSubOrder);
-            const parentOrder = orders.find(o => o.id === updatedSubOrder.orderId);
+            const originalSubOrder = subOrders.find(so => so.id === updatedSubOrder.id);
+            if (!originalSubOrder) {
+                console.error("Error: Could not find the original sub-order to compare changes.");
+                triggerNotification("Error", "No se pudo encontrar la tarea original para comparar los cambios.", "Error al actualizar tarea.", { roleTarget: [] });
+                return;
+            }
+    
+            const cleanUpdatedSubOrder = await db.updateSubOrder(updatedSubOrder);
+            const parentOrder = orders.find(o => o.id === cleanUpdatedSubOrder.orderId);
+            if (!parentOrder) {
+                console.error("Error: Could not find parent order for notification.");
+                triggerNotification("Error", "No se pudo encontrar la orden principal para la notificación.", "Error al actualizar tarea.", { roleTarget: [] });
+                return;
+            }
+    
+            // --- Notification Logic ---
+            const newAmount = cleanUpdatedSubOrder.amount ?? 0;
+            const originalAmount = originalSubOrder.amount;
+            const amountChanged = Math.abs(newAmount - (originalAmount ?? 0)) > 0.01;
+    
+            // Calculate effective budget for comparison
+            const siblingSubOrders = subOrders.filter(so => so.orderId === parentOrder.id);
+            const isSingleTask = siblingSubOrders.length === 1;
+            const hasOriginalBudget = originalSubOrder.budgetedAmount && originalSubOrder.budgetedAmount > 0;
+            
+            let effectiveOriginalBudget = originalSubOrder.budgetedAmount ?? 0;
+            if (!hasOriginalBudget && isSingleTask) {
+                effectiveOriginalBudget = parentOrder.quotedAmount ?? 0;
+            }
+            
+            const difference = newAmount - effectiveOriginalBudget;
+            const formatCurrency = (val: number) => new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(val);
+            
+            if (amountChanged) {
+                // Notify Finanzas that an amount was updated. This is general.
+                const whatsappMessageFinance = `*[TAREA ACTUALIZADA: ${cleanUpdatedSubOrder.subOrderNumber}]*\n\nLa unidad *${cleanUpdatedSubOrder.unit}* ha añadido/modificado un monto de *${formatCurrency(newAmount)}* a su tarea para la orden del cliente *${parentOrder.client}*.\n\nSe requiere revisión de Finanzas.`;
+                
+                triggerNotification(
+                    "Tarea Actualizada",
+                    `Orden ${parentOrder.orderNumber}: La unidad ${cleanUpdatedSubOrder.unit} actualizó la tarea ${cleanUpdatedSubOrder.subOrderNumber} con un nuevo monto de ${formatCurrency(newAmount)}.`,
+                    whatsappMessageFinance,
+                    { roleTarget: [UserRole.Finanzas, UserRole.Gerencia] }
+                );
+    
+                // Specific notification for Commercial Director about budget implications.
+                // This triggers if an amount is added for the first time OR if an existing amount is changed to create a discrepancy.
+                if ((originalAmount == null && newAmount > 0) || Math.abs(difference) > 0.01) {
+                    let message: string;
+                    let whatsappMessageForCommercial: string;
+                    let title: string;
+    
+                    if (originalAmount == null && newAmount > 0 && Math.abs(difference) < 0.01) {
+                        title = `Costo Establecido en Orden ${parentOrder.orderNumber}`;
+                        message = `La unidad "${cleanUpdatedSubOrder.unit}" ha establecido un costo de ${formatCurrency(newAmount)} para su tarea, de acuerdo con el presupuesto.`;
+                        whatsappMessageForCommercial = `*[COSTO DE TAREA ESTABLECIDO: ${parentOrder.orderNumber}]*\n\nLa unidad *${cleanUpdatedSubOrder.unit}* ha establecido un costo de *${formatCurrency(newAmount)}* para su tarea en la orden del cliente *${parentOrder.client}*.\n\nEl monto coincide con el presupuesto asignado. No se requiere acción inmediata.`;
+                    } else {
+                        const changeType = difference > 0 ? "un excedente" : "una discrepancia";
+                        title = `Ajuste de Presupuesto en Orden ${parentOrder.orderNumber}`;
+                        message = `La unidad "${cleanUpdatedSubOrder.unit}" ajustó el presupuesto de ${formatCurrency(effectiveOriginalBudget)} a ${formatCurrency(newAmount)}, generando ${changeType} de ${formatCurrency(Math.abs(difference))}.`;
+                        whatsappMessageForCommercial = `*[AJUSTE DE PRESUPUESTO: ${parentOrder.orderNumber}]*\n\nLa unidad *${cleanUpdatedSubOrder.unit}* ajustó el presupuesto para el cliente *${parentOrder.client}*.\n\n*Presupuesto Original:* ${formatCurrency(effectiveOriginalBudget)}\n*Nuevo Costo:* ${formatCurrency(newAmount)}\n*Diferencia:* ${formatCurrency(Math.abs(difference))} (${changeType.replace('un ', '').replace('una ', '')})\n\nSe requiere su revisión.`;
+                    }
+                    
+                    triggerNotification(
+                        title,
+                        message,
+                        whatsappMessageForCommercial,
+                        { roleTarget: [UserRole.Comercial, UserRole.Gerencia] }
+                    );
+                }
+            } else {
+                // NEW LOGIC: If the amount didn't change, but the user saved the form, it's considered a confirmation.
+                // This is especially relevant after a Commercial Director adjusts a budget.
+                if (newAmount > 0) {
+                    const whatsappMessageFinance = `*[MONTO CONFIRMADO: ${cleanUpdatedSubOrder.subOrderNumber}]*\n\nLa unidad *${cleanUpdatedSubOrder.unit}* ha revisado y confirmado el monto de *${formatCurrency(newAmount)}* para su tarea en la orden del cliente *${parentOrder.client}*.\n\nEl presupuesto está alineado y listo para proceder.`;
+                    
+                    triggerNotification(
+                        "Monto de Tarea Confirmado",
+                        `Orden ${parentOrder.orderNumber}: La unidad ${cleanUpdatedSubOrder.unit} confirmó el monto para la tarea ${cleanUpdatedSubOrder.subOrderNumber}.`,
+                        whatsappMessageFinance,
+                        { roleTarget: [UserRole.Finanzas, UserRole.Gerencia] }
+                    );
+                }
+            }
+            
             setEditSubOrderModalOpen(false);
             setEditingSubOrderContext(null);
-
-            const whatsappMessage = `*[TAREA ACTUALIZADA: ${updatedSubOrder.subOrderNumber}]*\n\nLa unidad *${updatedSubOrder.unit}* ha añadido un monto de *${new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(updatedSubOrder.amount || 0)}* a su tarea para la orden del cliente *${parentOrder?.client}*.\n\nSe requiere revisión de Finanzas.`;
-            
-            triggerNotification(
-                "Tarea Actualizada",
-                `Orden ${parentOrder?.orderNumber}: La unidad ${updatedSubOrder.unit} actualizó la tarea ${updatedSubOrder.subOrderNumber} con un nuevo monto de ${new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(updatedSubOrder.amount || 0)}.`,
-                whatsappMessage,
-                { roleTarget: [UserRole.Finanzas, UserRole.Gerencia] }
-            );
+    
         } catch (error) {
             console.error("Error updating sub-order: ", error);
              triggerNotification("Error", "No se pudo actualizar la tarea.", "Error al actualizar la tarea.", {roleTarget: []});
@@ -317,21 +395,32 @@ const App: React.FC = () => {
     };
 
 
-    const handleEditClick = (subOrder: SubOrder, order: Order) => {
+    const handleEditClick = (subOrderId: string, orderId: string) => {
+        // Find the most up-to-date versions of the order and sub-order from the main state.
+        // This prevents using stale data from a memoized table render.
+        const subOrderToEdit = subOrders.find(so => so.id === subOrderId);
+        const parentOrder = orders.find(o => o.id === orderId);
+
+        if (!subOrderToEdit || !parentOrder) {
+            console.error("Could not find the requested order or sub-order for editing.");
+            triggerNotification("Error", "No se pudo encontrar la tarea o la orden para editar.", "Error de edición.", {roleTarget: []});
+            return;
+        }
+
         if (currentUserRole === UserRole.Unidad) {
-            if (subOrder.unit !== currentUserUnit) {
+            if (subOrderToEdit.unit !== currentUserUnit) {
                  triggerNotification("Acceso Denegado", "No tiene permiso para editar tareas de otra unidad.", "Intento de acceso denegado.", {roleTarget: []});
                 return;
             }
-            const siblings = subOrders.filter(so => so.orderId === order.id);
+            const siblings = subOrders.filter(so => so.orderId === parentOrder.id);
             setEditingSubOrderContext({
-                subOrder: cleanSubOrder(subOrder),
-                parentOrder: cleanOrder(order),
+                subOrder: cleanSubOrder(subOrderToEdit),
+                parentOrder: cleanOrder(parentOrder),
                 siblingSubOrders: siblings.map(cleanSubOrder)
             });
             setEditSubOrderModalOpen(true);
         } else if (currentUserRole === UserRole.Finanzas) {
-            setEditingOrder(cleanOrder(order));
+            setEditingOrder(cleanOrder(parentOrder));
             setEditOrderModalOpen(true);
         }
     };
@@ -451,6 +540,45 @@ const App: React.FC = () => {
     
         setNotifyPaymentModalOpen(false);
         setOrderForPaymentNotification(null);
+    };
+
+    const handleAdjustBudgetClick = (order: Order) => {
+        const subOrdersForOrder = subOrders.filter(so => so.orderId === order.id);
+        setAdjustingBudgetContext({
+            order: cleanOrder(order),
+            subOrders: subOrdersForOrder.map(cleanSubOrder)
+        });
+        setAdjustBudgetModalOpen(true);
+    };
+
+    const handleUpdateBudgets = async (updatedOrder: Order, updatedSubOrders: SubOrder[]) => {
+        try {
+            const subOrdersPayload = updatedSubOrders.map(so => ({
+                id: so.id,
+                budgetedAmount: so.budgetedAmount || 0,
+                amount: so.budgetedAmount || 0, // The new amount is the adjusted budget
+            }));
+
+            await db.updateOrderBudgets(updatedOrder.id, updatedOrder.quotedAmount || 0, subOrdersPayload);
+            
+            setAdjustBudgetModalOpen(false);
+            setAdjustingBudgetContext(null);
+
+            const affectedUnits = [...new Set(updatedSubOrders.map(so => so.unit))];
+
+            const whatsappMessage = `*[AJUSTE DE PRESUPUESTO: ${updatedOrder.orderNumber}]*\n\nEl Dir. Comercial ha ajustado los presupuestos para el cliente *${updatedOrder.client}*. Se requiere que las siguientes unidades revisen sus nuevos montos asignados:\n${affectedUnits.map(u => `• *${u}*`).join('\n')}\n\nPor favor, revisar el tablero.`;
+
+            triggerNotification(
+                `Presupuesto Ajustado en Orden ${updatedOrder.orderNumber}`,
+                `El Director Comercial ha ajustado los presupuestos para la orden ${updatedOrder.orderNumber}. Revisa los nuevos montos.`,
+                whatsappMessage,
+                { roleTarget: [UserRole.Unidad], unitTarget: affectedUnits }
+            );
+
+        } catch (error) {
+            console.error("Error updating budgets:", error);
+            triggerNotification("Error", "No se pudieron actualizar los presupuestos.", "Error al ajustar presupuestos.", {roleTarget: []});
+        }
     };
     
 
@@ -751,6 +879,7 @@ const App: React.FC = () => {
                     subOrderFinancials={subOrderFinancials}
                     directors={directors}
                     executives={executives}
+                    onAdjustBudget={handleAdjustBudgetClick}
                 />
             </div>
 
@@ -796,6 +925,17 @@ const App: React.FC = () => {
                     order={orderForPaymentNotification}
                     onClose={() => setNotifyPaymentModalOpen(false)}
                     onSubmit={handleSendPaymentNotification}
+                />
+            )}
+            {isAdjustBudgetModalOpen && adjustingBudgetContext && (
+                <AdjustBudgetModal
+                    order={adjustingBudgetContext.order}
+                    subOrders={adjustingBudgetContext.subOrders}
+                    onClose={() => {
+                        setAdjustBudgetModalOpen(false);
+                        setAdjustingBudgetContext(null);
+                    }}
+                    onSubmit={handleUpdateBudgets}
                 />
             )}
             {toastNotification && (

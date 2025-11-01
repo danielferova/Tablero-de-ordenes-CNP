@@ -50,6 +50,7 @@ export interface SubOrder {
   workType: string;
   description: string;
   amount?: number;
+  budgetedAmount?: number;
   observations?: string;
   status: OrderStatus;
   // FIX: Make creationDate required to match Order interface and avoid type conflicts.

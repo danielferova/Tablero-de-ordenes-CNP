@@ -8,7 +8,7 @@ interface FullOrderData extends Order, SubOrder {}
 
 interface DashboardProps {
     data: FullOrderData[];
-    onEdit: (subOrder: SubOrder, order: Order) => void;
+    onEdit: (subOrderId: string, orderId: string) => void;
     currentUserRole: UserRole;
     currentUserUnit: Unit | null;
     onAddSubOrder: (order: Order) => void;
@@ -17,9 +17,10 @@ interface DashboardProps {
     subOrderFinancials: { paidPerSubOrder: Map<string, number> };
     directors: string[];
     executives: string[];
+    onAdjustBudget: (order: Order) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onFilteredDataChange, onNotifyPayment, subOrderFinancials, directors, executives }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onFilteredDataChange, onNotifyPayment, subOrderFinancials, directors, executives, onAdjustBudget }) => {
     const [filters, setFilters] = useState<{
         unit: Unit[];
         status: string;
@@ -138,6 +139,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
                     currentUserUnit={currentUserUnit}
                     onAddSubOrder={onAddSubOrder}
                     onNotifyPayment={onNotifyPayment}
+                    onAdjustBudget={onAdjustBudget}
                 />
             </div>
         </main>

@@ -59,10 +59,9 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
     
     const canEdit = (subOrder: SubOrder) => {
         if (currentUserRole === UserRole.Unidad) {
-            // A unit director can edit IF it's their unit AND the task is still pending.
-            const isTheirUnit = subOrder.unit === currentUserUnit;
-            const isPending = subOrder.status === OrderStatus.Pendiente;
-            return isTheirUnit && isPending;
+            // A unit director can ALWAYS open the edit modal for their own unit's tasks.
+            // The modal itself will restrict which fields can be changed based on status.
+            return subOrder.unit === currentUserUnit;
         }
         if (currentUserRole === UserRole.Finanzas) {
             // Finance can always edit financials if an amount is set, regardless of status.
@@ -77,7 +76,7 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                 return "No tiene permiso para editar tareas de otra unidad.";
             }
             if (subOrder.status !== OrderStatus.Pendiente) {
-                return "No se puede editar una tarea que ya ha sido facturada o cobrada.";
+                return "Editar monto gastado y observaciones (tarea facturada/cobrada).";
             }
         }
         
@@ -129,8 +128,10 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                 subOrderNumber: item.subOrderNumber,
                 unit: item.unit,
                 workType: item.workType,
+                taskName: item.taskName,
                 description: item.description,
                 amount: item.amount,
+                spentAmount: item.spentAmount,
                 budgetedAmount: item.budgetedAmount,
                 observations: item.observations,
                 status: item.status,
@@ -282,34 +283,38 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
                                                     </div>
                                                 )}
 
-                                                <table className="w-full table-fixed">
+                                                <table className="w-full table-fixed border-l border-gray-200 dark:border-gray-600">
                                                     <thead>
-                                                      <tr className="border-b border-gray-200 dark:border-gray-700">
-                                                        <th className="w-[10%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Suborden</th>
-                                                        <th className="w-[10%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha Creación</th>
-                                                        <th className="w-[15%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Unidad</th>
-                                                        <th className="w-[10%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo Trabajo</th>
-                                                        <th className="w-[25%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Descripción</th>
-                                                        <th className="w-[15%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Observaciones</th>
-                                                        <th className="w-[5%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Monto</th>
-                                                        <th className="w-[5%] py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
-                                                        <th className="relative py-2 w-[5%]"><span className="sr-only">Edit</span></th>
+                                                      <tr className="border-b-2 border-gray-300 dark:border-gray-600">
+                                                        <th className="w-[8%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Suborden</th>
+                                                        <th className="w-[7%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Fecha</th>
+                                                        <th className="w-[8%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Unidad</th>
+                                                        <th className="w-[10%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Tipo Trabajo (Gral)</th>
+                                                        <th className="w-[10%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Nombre Trabajo (Unidad)</th>
+                                                        <th className="w-[17%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Descripción</th>
+                                                        <th className="w-[17%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Observaciones</th>
+                                                        <th className="w-[7%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Monto</th>
+                                                        <th className="w-[7%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Monto Gastado</th>
+                                                        <th className="w-[5%] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-gray-600">Estado</th>
+                                                        <th className="relative px-3 py-3 w-[2%]"><span className="sr-only">Edit</span></th>
                                                       </tr>
                                                     </thead>
                                                     <tbody>
                                                         {order.subOrders.map(subOrder => (
-                                                            <tr key={subOrder.id} className="border-b border-gray-100 dark:border-gray-700/50 last:border-b-0">
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate">{subOrder.subOrderNumber}</td>
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDate(subOrder.creationDate)}</td>
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate">{subOrder.unit}</td>
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate">{subOrder.workType}</td>
-                                                                <td className="py-3 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words text-justify">{subOrder.description}</td>
-                                                                <td className="py-3 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words text-justify">{subOrder.observations || 'N/A'}</td>
-                                                                <td className="py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatCurrency(subOrder.amount)}</td>
-                                                                <td className="py-3 whitespace-nowrap">
+                                                            <tr key={subOrder.id} className="border-b border-gray-100 dark:border-gray-700/50 last:border-b-0 align-middle">
+                                                                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 truncate border-r border-gray-200 dark:border-gray-600">{subOrder.subOrderNumber}</td>
+                                                                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 border-r border-gray-200 dark:border-gray-600">{formatDate(subOrder.creationDate)}</td>
+                                                                <td className="px-3 py-4 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words border-r border-gray-200 dark:border-gray-600" title={subOrder.unit}>{subOrder.unit}</td>
+                                                                <td className="px-3 py-4 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words text-justify border-r border-gray-200 dark:border-gray-600">{subOrder.workType}</td>
+                                                                <td className="px-3 py-4 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words text-justify border-r border-gray-200 dark:border-gray-600">{subOrder.taskName || 'N/A'}</td>
+                                                                <td className="px-3 py-4 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words text-justify border-r border-gray-200 dark:border-gray-600">{subOrder.description}</td>
+                                                                <td className="px-3 py-4 text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words text-justify border-r border-gray-200 dark:border-gray-600" title={subOrder.observations || ''}>{subOrder.observations || 'N/A'}</td>
+                                                                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 border-r border-gray-200 dark:border-gray-600">{formatCurrency(subOrder.amount)}</td>
+                                                                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 border-r border-gray-200 dark:border-gray-600">{formatCurrency(subOrder.spentAmount)}</td>
+                                                                <td className="px-3 py-4 whitespace-nowrap border-r border-gray-200 dark:border-gray-600">
                                                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusChipClass(subOrder.status)}`}>{subOrder.status}</span>
                                                                 </td>
-                                                                <td className="py-3 whitespace-nowrap text-right text-sm font-medium">
+                                                                <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                                     {(currentUserRole === UserRole.Unidad || currentUserRole === UserRole.Finanzas) && (
                                                                         <button 
                                                                             onClick={() => onEdit(subOrder.id, order.id)} 

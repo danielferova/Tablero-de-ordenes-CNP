@@ -55,8 +55,10 @@ export interface SubOrder {
   subOrderNumber: string;
   unit: Unit;
   workType: string;
+  taskName?: string;
   description: string;
   amount?: number;
+  spentAmount?: number;
   budgetedAmount?: number;
   observations?: string;
   status: OrderStatus;

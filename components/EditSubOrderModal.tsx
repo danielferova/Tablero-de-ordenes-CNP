@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { SubOrder, Order } from '../types';
+import { SubOrder, Order, OrderStatus } from '../types';
 import { WarningIcon } from './icons/WarningIcon';
 
 interface EditSubOrderModalProps {
@@ -18,12 +18,16 @@ const formatCurrency = (value: number | undefined | null) => {
 
 const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentOrder, siblingSubOrders, onClose, onSubmit }) => {
     const [formData, setFormData] = useState({
-        workType: subOrder.workType || '',
-        description: subOrder.description || '',
+        taskName: subOrder.taskName || '',
         amount: subOrder.amount?.toString() || '',
+        spentAmount: subOrder.spentAmount?.toString() || '',
         observations: subOrder.observations || '',
     });
     const [formError, setFormError] = useState<string | null>(null);
+
+    const isReadOnly = useMemo(() => {
+        return subOrder.status === OrderStatus.Facturado || subOrder.status === OrderStatus.Cobrado;
+    }, [subOrder.status]);
 
     // Determine the effective budget for display and comparison.
     const effectiveBudget = useMemo(() => {
@@ -43,9 +47,9 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
 
     useEffect(() => {
         setFormData({
-            workType: subOrder.workType || '',
-            description: subOrder.description || '',
+            taskName: subOrder.taskName || '',
             amount: subOrder.amount?.toString() || '',
+            spentAmount: subOrder.spentAmount?.toString() || '',
             observations: subOrder.observations || '',
         });
     }, [subOrder]);
@@ -61,22 +65,44 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
         e.preventDefault();
         setFormError(null);
 
-        const amountValue = formData.amount === '' ? NaN : parseFloat(String(formData.amount));
+        const spentAmountValue = formData.spentAmount === '' ? undefined : parseFloat(String(formData.spentAmount));
 
+        if (spentAmountValue !== undefined && (isNaN(spentAmountValue) || spentAmountValue < 0)) {
+            setFormError('Si se ingresa, el monto gastado no puede ser negativo.');
+            return;
+        }
+
+        if (isReadOnly) {
+            const updatedSubOrder: SubOrder = {
+                ...subOrder, // Start with original values to preserve locked fields
+                spentAmount: spentAmountValue,
+                // Observations and other fields are preserved from the original `subOrder` spread
+            };
+            onSubmit(updatedSubOrder);
+            return;
+        }
+
+        // Full validation for non-readonly (Pending) tasks
+        const amountValue = formData.amount === '' ? NaN : parseFloat(String(formData.amount));
+        
+        if (!formData.taskName.trim()) {
+            setFormError('El "Nombre del Trabajo / Servicio" es un campo obligatorio.');
+            return;
+        }
         if (isNaN(amountValue)) {
-            setFormError('El monto debe ser un número válido.');
+            setFormError('El monto de tarea debe ser un número válido.');
             return;
         }
         if (amountValue < 0) {
-            setFormError('El monto no puede ser negativo.');
+            setFormError('El monto de tarea no puede ser negativo.');
             return;
         }
 
         const updatedSubOrder: SubOrder = {
             ...subOrder,
-            workType: formData.workType,
-            description: formData.description,
+            taskName: formData.taskName,
             amount: amountValue,
+            spentAmount: spentAmountValue,
             observations: formData.observations,
         };
 
@@ -97,18 +123,40 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg">
-                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Editar Tarea de: <span className="text-brand-primary">{subOrder.unit}</span></h2>
+                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+                    {isReadOnly ? 'Actualizar Tarea' : 'Editar Tarea'} de: <span className="text-brand-primary">{subOrder.unit}</span>
+                </h2>
                 <form onSubmit={handleSubmit}>
                     <div className="space-y-4">
+                        {isReadOnly && (
+                            <div className="p-3 mb-2 bg-yellow-50 dark:bg-yellow-900/30 rounded-md border border-yellow-200 dark:border-yellow-800 text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-3">
+                                <WarningIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="font-semibold">Modo de Edición Limitada</p>
+                                    <p>Esta tarea ya ha sido facturada/cobrada. Solo se puede modificar el "Monto Gastado".</p>
+                                </div>
+                            </div>
+                        )}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Trabajo</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Trabajo (Asignado)</label>
+                             <input
+                                type="text"
+                                value={subOrder.workType || ''}
+                                className="mt-1 w-full p-2 bg-gray-100 dark:bg-gray-700/50 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none cursor-not-allowed"
+                                readOnly
+                                disabled
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre del Trabajo / Servicio</label>
                             <input
                                 type="text"
-                                name="workType"
-                                value={formData.workType}
+                                name="taskName"
+                                value={formData.taskName}
                                 onChange={handleChange}
-                                className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                placeholder="Ej: Producto, Servicio"
+                                className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
+                                placeholder="Ej: Impresión de Lona, Spot de Radio 30s"
+                                readOnly={isReadOnly}
                                 required
                             />
                         </div>
@@ -116,7 +164,7 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción de Tarea (Asignada por Dir. Comercial)</label>
                             <textarea
                                 name="description"
-                                value={formData.description}
+                                value={subOrder.description || ''}
                                 rows={3}
                                 className="mt-1 w-full p-2 bg-gray-100 dark:bg-gray-700/50 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none cursor-not-allowed"
                                 readOnly
@@ -136,20 +184,37 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
                                 <span className="font-semibold text-gray-700 dark:text-gray-300">{formatCurrency(parentOrder.quotedAmount)}</span>
                             </div>
                         </div>
-                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto de Tarea (Editable por Unidad)</label>
-                            <input
-                                type="number"
-                                name="amount"
-                                value={formData.amount}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                required
-                                step="0.01"
-                                min="0"
-                            />
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto de Tarea (Presupuesto)</label>
+                                <input
+                                    type="number"
+                                    name="amount"
+                                    value={formData.amount}
+                                    onChange={handleChange}
+                                    className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
+                                    required
+                                    readOnly={isReadOnly}
+                                    step="0.01"
+                                    min="0"
+                                />
+                            </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto Gastado (Referencia)</label>
+                                <input
+                                    type="number"
+                                    name="spentAmount"
+                                    value={formData.spentAmount}
+                                    onChange={handleChange}
+                                    className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                    step="0.01"
+                                    min="0"
+                                    placeholder="Costo interno (opcional)"
+                                />
+                            </div>
+                        </div>
                             {/* Discrepancy/Surplus Indicator */}
-                            {Math.abs(difference) > 0.01 && (
+                            {!isReadOnly && Math.abs(difference) > 0.01 && (
                                 <div className={`mt-2 p-2 rounded-md text-sm flex items-start ${difference > 0 ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300' : 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300'}`}>
                                     <WarningIcon className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
                                     <div>
@@ -160,15 +225,15 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
                                     </div>
                                 </div>
                             )}
-                        </div>
                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones (Opcional)</label>
                             <textarea
                                 name="observations"
                                 value={formData.observations}
                                 onChange={handleChange}
                                 rows={3}
-                                className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
+                                readOnly={isReadOnly}
                             />
                         </div>
 

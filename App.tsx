@@ -28,8 +28,10 @@ const cleanSubOrder = (so: SubOrder): SubOrder => ({
     subOrderNumber: so.subOrderNumber,
     unit: so.unit,
     workType: so.workType,
+    taskName: so.taskName,
     description: so.description,
     amount: so.amount,
+    spentAmount: so.spentAmount,
     budgetedAmount: so.budgetedAmount,
     observations: so.observations,
     status: so.status,
@@ -305,16 +307,19 @@ const App: React.FC = () => {
                     );
                 }
             } else {
-                // NEW LOGIC: If the amount didn't change, but the user saved the form, it's considered a confirmation.
-                // This is especially relevant after a Commercial Director adjusts a budget.
-                if (newAmount > 0) {
+                // If amount didn't change but the form was saved, it's a confirmation,
+                // but ONLY if the task was still pending. This prevents sending "confirmation"
+                // notifications when a Director of Unit only updates the "Monto Gastado" on a task
+                // that is already Facturado or Cobrado.
+                if (originalSubOrder.status === OrderStatus.Pendiente && newAmount > 0) {
                     const whatsappMessageFinance = `*[MONTO CONFIRMADO: ${cleanUpdatedSubOrder.subOrderNumber}]*\n\nLa unidad *${cleanUpdatedSubOrder.unit}* ha revisado y confirmado el monto de *${formatCurrency(newAmount)}* para su tarea en la orden del cliente *${parentOrder.client}*.\n\nEl presupuesto está alineado y listo para proceder.`;
                     
                     triggerNotification(
                         "Monto de Tarea Confirmado",
                         `Orden ${parentOrder.orderNumber}: La unidad ${cleanUpdatedSubOrder.unit} confirmó el monto para la tarea ${cleanUpdatedSubOrder.subOrderNumber}.`,
                         whatsappMessageFinance,
-                        { roleTarget: [UserRole.Finanzas, UserRole.Gerencia] }
+                        // Notify all relevant parties that the budget is aligned and confirmed by the unit.
+                        { roleTarget: [UserRole.Finanzas, UserRole.Gerencia, UserRole.Comercial], directorTarget: parentOrder.director ? [parentOrder.director] : [] }
                     );
                 }
             }

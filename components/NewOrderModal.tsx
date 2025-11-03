@@ -175,135 +175,139 @@ const NewOrderModal: React.FC<NewOrderModalProps> = ({ onClose, onSubmit, client
     );
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Crear Nueva Orden</h2>
-                <form onSubmit={handleSubmit}>
-                    <div className="space-y-4">
-                        {/* Client Input */}
-                        <div className="relative">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre del Cliente</label>
-                            <input type="text" placeholder="Buscar o agregar cliente" value={clientInput} 
-                                onChange={e => setClientInput(e.target.value)}
-                                onFocus={() => setOpenDropdown('client')}
-                                onBlur={() => setTimeout(() => setOpenDropdown(null), 200)}
-                                className="w-full mt-1 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
-                            {openDropdown === 'client' && renderDropdown(
-                                filteredClients, 
-                                (client) => { setClientInput(client); setOpenDropdown(null); },
-                                () => setOpenDropdown(null),
-                                `Añadir "${clientInput.trim()}"`,
-                                isNewClient
-                            )}
-                        </div>
-
-                        {/* Director and Executive Inputs */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Director Input */}
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+                <header className="p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Crear Nueva Orden</h2>
+                </header>
+                <main className="p-6 overflow-y-auto flex-grow">
+                    <form id="new-order-form" onSubmit={handleSubmit}>
+                        <div className="space-y-4">
+                            {/* Client Input */}
                             <div className="relative">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Director</label>
-                                <input type="text" placeholder="Buscar Director" value={directorInput} 
-                                    onChange={e => setDirectorInput(e.target.value)}
-                                    onFocus={() => setOpenDropdown('director')}
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre del Cliente</label>
+                                <input type="text" placeholder="Buscar o agregar cliente" value={clientInput} 
+                                    onChange={e => setClientInput(e.target.value)}
+                                    onFocus={() => setOpenDropdown('client')}
                                     onBlur={() => setTimeout(() => setOpenDropdown(null), 200)}
                                     className="w-full mt-1 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
-                                {openDropdown === 'director' && renderDropdown(
-                                    filteredDirectors,
-                                    (director) => { setDirectorInput(director); setOpenDropdown(null); }
+                                {openDropdown === 'client' && renderDropdown(
+                                    filteredClients, 
+                                    (client) => { setClientInput(client); setOpenDropdown(null); },
+                                    () => setOpenDropdown(null),
+                                    `Añadir "${clientInput.trim()}"`,
+                                    isNewClient
                                 )}
                             </div>
-                            {/* Executive Input */}
-                            <div className="relative">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Ejecutivo a Cargo</label>
-                                <input type="text" placeholder="Buscar Ejecutivo" value={executiveInput} 
-                                    onChange={e => setExecutiveInput(e.target.value)}
-                                    onFocus={() => setOpenDropdown('executive')}
-                                    onBlur={() => setTimeout(() => setOpenDropdown(null), 200)}
-                                    className="w-full mt-1 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
-                                {openDropdown === 'executive' && renderDropdown(
-                                    filteredExecutives,
-                                    (executive) => { setExecutiveInput(executive); setOpenDropdown(null); }
-                                )}
-                            </div>
-                        </div>
 
-                        <textarea placeholder="Descripción del Trabajo" value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                            <input type="text" placeholder="Tipo de Trabajo" value={workType} onChange={e => setWorkType(e.target.value)} className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
-                            <input type="number" placeholder="Monto Cotizado (Q)" value={quotedAmount} onChange={e => setQuotedAmount(e.target.value)} className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Método de Pago</label>
-                                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required>
-                                    <option value="" disabled>Seleccionar...</option>
-                                    {Object.values(PaymentMethod).map(pm => <option key={pm} value={pm}>{pm}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Facturación</label>
-                                <select value={billingType} onChange={e => setBillingType(e.target.value as 'perTask' | 'global')} className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required>
-                                    <option value="" disabled>Seleccionar...</option>
-                                    <option value="perTask">Facturación por Tarea</option>
-                                    <option value="global">Facturación Global</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Asignar a Unidades:</label>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4">
-                                {ALL_UNITS.map(unit => (
-                                    <div key={unit} className="col-span-2 grid grid-cols-2 gap-x-4 items-center">
-                                        <label className="flex items-center space-x-2 cursor-pointer p-1">
-                                            <input type="checkbox" checked={selectedUnits.includes(unit)} onChange={() => handleUnitToggle(unit)} className="h-4 w-4 text-brand-primary focus:ring-brand-primary border-gray-300 rounded" />
-                                            <span className="text-sm text-gray-600 dark:text-gray-400">{unit}</span>
-                                        </label>
-                                        {selectedUnits.includes(unit) && (
-                                            <input
-                                                type="number"
-                                                placeholder="Monto (Opcional)"
-                                                value={unitAmounts[unit] || ''}
-                                                onChange={(e) => handleUnitAmountChange(unit, e.target.value)}
-                                                className="w-full p-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md"
-                                                step="0.01"
-                                                min="0"
-                                            />
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                             {selectedUnits.length > 0 && (
-                                <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-900/50 rounded-md text-sm">
-                                    <div className={`flex justify-between ${isOverBudget ? 'text-red-500' : 'text-gray-800 dark:text-gray-100'}`}>
-                                        <span>Total Asignado:</span>
-                                        <span className="font-semibold">{formatCurrency(totalAssignedAmount)}</span>
-                                    </div>
-                                    <div className="flex justify-between mt-1 text-gray-600 dark:text-gray-300">
-                                        <span>Monto Cotizado:</span>
-                                        <span className="font-semibold">{formatCurrency(quotedAmountValue)}</span>
-                                    </div>
-                                    {isOverBudget && (
-                                        <p className="text-xs text-red-500 mt-2 text-right">El total asignado no puede exceder el monto cotizado.</p>
+                            {/* Director and Executive Inputs */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Director Input */}
+                                <div className="relative">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Director</label>
+                                    <input type="text" placeholder="Buscar Director" value={directorInput} 
+                                        onChange={e => setDirectorInput(e.target.value)}
+                                        onFocus={() => setOpenDropdown('director')}
+                                        onBlur={() => setTimeout(() => setOpenDropdown(null), 200)}
+                                        className="w-full mt-1 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
+                                    {openDropdown === 'director' && renderDropdown(
+                                        filteredDirectors,
+                                        (director) => { setDirectorInput(director); setOpenDropdown(null); }
                                     )}
                                 </div>
-                            )}
-                        </div>
-
-                         {formError && (
-                            <div className="flex items-center text-red-600 dark:text-red-400 p-2 bg-red-50 dark:bg-red-900/20 rounded-md text-sm">
-                                <WarningIcon className="w-5 h-5 mr-2" />
-                                {formError}
+                                {/* Executive Input */}
+                                <div className="relative">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Ejecutivo a Cargo</label>
+                                    <input type="text" placeholder="Buscar Ejecutivo" value={executiveInput} 
+                                        onChange={e => setExecutiveInput(e.target.value)}
+                                        onFocus={() => setOpenDropdown('executive')}
+                                        onBlur={() => setTimeout(() => setOpenDropdown(null), 200)}
+                                        className="w-full mt-1 p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
+                                    {openDropdown === 'executive' && renderDropdown(
+                                        filteredExecutives,
+                                        (executive) => { setExecutiveInput(executive); setOpenDropdown(null); }
+                                    )}
+                                </div>
                             </div>
-                         )}
-                    </div>
-                    <div className="mt-6 flex justify-end space-x-4">
-                        <button type="button" onClick={onClose} className="py-2 px-4 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500">Cancelar</button>
-                        <button type="submit" className="py-2 px-4 bg-brand-primary text-white rounded-md hover:bg-red-700 disabled:bg-red-400 dark:disabled:bg-red-800 disabled:cursor-not-allowed" disabled={isOverBudget}>Crear Orden</button>
-                    </div>
-                </form>
+
+                            <textarea placeholder="Descripción del Trabajo" value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <input type="text" placeholder="Tipo de Trabajo" value={workType} onChange={e => setWorkType(e.target.value)} className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
+                                <input type="number" placeholder="Monto Cotizado (Q)" value={quotedAmount} onChange={e => setQuotedAmount(e.target.value)} className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required />
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Método de Pago</label>
+                                    <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required>
+                                        <option value="" disabled>Seleccionar...</option>
+                                        {Object.values(PaymentMethod).map(pm => <option key={pm} value={pm}>{pm}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Facturación</label>
+                                    <select value={billingType} onChange={e => setBillingType(e.target.value as 'perTask' | 'global')} className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md" required>
+                                        <option value="" disabled>Seleccionar...</option>
+                                        <option value="perTask">Facturación por Tarea</option>
+                                        <option value="global">Facturación Global</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Asignar a Unidades:</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4">
+                                    {ALL_UNITS.map(unit => (
+                                        <div key={unit} className="col-span-2 grid grid-cols-2 gap-x-4 items-center">
+                                            <label className="flex items-center space-x-2 cursor-pointer p-1">
+                                                <input type="checkbox" checked={selectedUnits.includes(unit)} onChange={() => handleUnitToggle(unit)} className="h-4 w-4 text-brand-primary focus:ring-brand-primary border-gray-300 rounded" />
+                                                <span className="text-sm text-gray-600 dark:text-gray-400">{unit}</span>
+                                            </label>
+                                            {selectedUnits.includes(unit) && (
+                                                <input
+                                                    type="number"
+                                                    placeholder="Monto (Opcional)"
+                                                    value={unitAmounts[unit] || ''}
+                                                    onChange={(e) => handleUnitAmountChange(unit, e.target.value)}
+                                                    className="w-full p-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md"
+                                                    step="0.01"
+                                                    min="0"
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                 {selectedUnits.length > 0 && (
+                                    <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-900/50 rounded-md text-sm">
+                                        <div className={`flex justify-between ${isOverBudget ? 'text-red-500' : 'text-gray-800 dark:text-gray-100'}`}>
+                                            <span>Total Asignado:</span>
+                                            <span className="font-semibold">{formatCurrency(totalAssignedAmount)}</span>
+                                        </div>
+                                        <div className="flex justify-between mt-1 text-gray-600 dark:text-gray-300">
+                                            <span>Monto Cotizado:</span>
+                                            <span className="font-semibold">{formatCurrency(quotedAmountValue)}</span>
+                                        </div>
+                                        {isOverBudget && (
+                                            <p className="text-xs text-red-500 mt-2 text-right">El total asignado no puede exceder el monto cotizado.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                             {formError && (
+                                <div className="flex items-center text-red-600 dark:text-red-400 p-2 bg-red-50 dark:bg-red-900/20 rounded-md text-sm">
+                                    <WarningIcon className="w-5 h-5 mr-2" />
+                                    {formError}
+                                </div>
+                             )}
+                        </div>
+                    </form>
+                </main>
+                <footer className="p-4 flex justify-end space-x-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+                    <button type="button" onClick={onClose} className="py-2 px-4 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500">Cancelar</button>
+                    <button type="submit" form="new-order-form" className="py-2 px-4 bg-brand-primary text-white rounded-md hover:bg-red-700 disabled:bg-red-400 dark:disabled:bg-red-800 disabled:cursor-not-allowed" disabled={isOverBudget}>Crear Orden</button>
+                </footer>
             </div>
         </div>
     );

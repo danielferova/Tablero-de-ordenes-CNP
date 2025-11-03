@@ -121,134 +121,138 @@ const EditSubOrderModal: React.FC<EditSubOrderModalProps> = ({ subOrder, parentO
     const difference = currentAmount - effectiveBudget;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg">
-                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
-                    {isReadOnly ? 'Actualizar Tarea' : 'Editar Tarea'} de: <span className="text-brand-primary">{subOrder.unit}</span>
-                </h2>
-                <form onSubmit={handleSubmit}>
-                    <div className="space-y-4">
-                        {isReadOnly && (
-                            <div className="p-3 mb-2 bg-yellow-50 dark:bg-yellow-900/30 rounded-md border border-yellow-200 dark:border-yellow-800 text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-3">
-                                <WarningIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="font-semibold">Modo de Edición Limitada</p>
-                                    <p>Esta tarea ya ha sido facturada/cobrada. Solo se puede modificar el "Monto Gastado".</p>
-                                </div>
-                            </div>
-                        )}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Trabajo (Asignado)</label>
-                             <input
-                                type="text"
-                                value={subOrder.workType || ''}
-                                className="mt-1 w-full p-2 bg-gray-100 dark:bg-gray-700/50 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none cursor-not-allowed"
-                                readOnly
-                                disabled
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre del Trabajo / Servicio</label>
-                            <input
-                                type="text"
-                                name="taskName"
-                                value={formData.taskName}
-                                onChange={handleChange}
-                                className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
-                                placeholder="Ej: Impresión de Lona, Spot de Radio 30s"
-                                readOnly={isReadOnly}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción de Tarea (Asignada por Dir. Comercial)</label>
-                            <textarea
-                                name="description"
-                                value={subOrder.description || ''}
-                                rows={3}
-                                className="mt-1 w-full p-2 bg-gray-100 dark:bg-gray-700/50 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none cursor-not-allowed"
-                                readOnly
-                                disabled
-                            />
-                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                La descripción de la tarea es asignada por el Director Comercial y no puede ser modificada.
-                            </p>
-                        </div>
-                        <div className="p-3 mb-2 bg-blue-50 dark:bg-blue-900/30 rounded-md border border-blue-200 dark:border-blue-800">
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="font-semibold text-blue-800 dark:text-blue-200">Presupuesto asignado a esta tarea:</span>
-                                <span className="font-bold text-blue-900 dark:text-blue-100">{formatCurrency(effectiveBudget)}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-sm mt-1">
-                                <span className="text-gray-600 dark:text-gray-400">Monto total cotizado para la orden:</span>
-                                <span className="font-semibold text-gray-700 dark:text-gray-300">{formatCurrency(parentOrder.quotedAmount)}</span>
-                            </div>
-                        </div>
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto de Tarea (Presupuesto)</label>
-                                <input
-                                    type="number"
-                                    name="amount"
-                                    value={formData.amount}
-                                    onChange={handleChange}
-                                    className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
-                                    required
-                                    readOnly={isReadOnly}
-                                    step="0.01"
-                                    min="0"
-                                />
-                            </div>
-                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto Gastado (Referencia)</label>
-                                <input
-                                    type="number"
-                                    name="spentAmount"
-                                    value={formData.spentAmount}
-                                    onChange={handleChange}
-                                    className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                    step="0.01"
-                                    min="0"
-                                    placeholder="Costo interno (opcional)"
-                                />
-                            </div>
-                        </div>
-                            {/* Discrepancy/Surplus Indicator */}
-                            {!isReadOnly && Math.abs(difference) > 0.01 && (
-                                <div className={`mt-2 p-2 rounded-md text-sm flex items-start ${difference > 0 ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300' : 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300'}`}>
-                                    <WarningIcon className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+                <header className="p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {isReadOnly ? 'Actualizar Tarea' : 'Editar Tarea'} de: <span className="text-brand-primary">{subOrder.unit}</span>
+                    </h2>
+                </header>
+                <main className="p-6 overflow-y-auto flex-grow">
+                    <form id="edit-suborder-form" onSubmit={handleSubmit}>
+                        <div className="space-y-4">
+                            {isReadOnly && (
+                                <div className="p-3 mb-2 bg-yellow-50 dark:bg-yellow-900/30 rounded-md border border-yellow-200 dark:border-yellow-800 text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-3">
+                                    <WarningIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
                                     <div>
-                                        <p className="font-semibold">
-                                            {difference > 0 ? 'Excedente' : 'Discrepancia'}: {formatCurrency(Math.abs(difference))}
-                                        </p>
-                                        <p className="text-xs">Se notificará al Director Comercial sobre este ajuste para su revisión.</p>
+                                        <p className="font-semibold">Modo de Edición Limitada</p>
+                                        <p>Esta tarea ya ha sido facturada/cobrada. Solo se puede modificar el "Monto Gastado".</p>
                                     </div>
                                 </div>
                             )}
-                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones (Opcional)</label>
-                            <textarea
-                                name="observations"
-                                value={formData.observations}
-                                onChange={handleChange}
-                                rows={3}
-                                className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
-                                readOnly={isReadOnly}
-                            />
-                        </div>
-
-                        {formError && (
-                            <div className="flex items-center text-red-600 dark:text-red-400 p-2 mt-2 bg-red-50 dark:bg-red-900/20 rounded-md text-sm">
-                                <WarningIcon className="w-5 h-5 mr-2" />
-                                {formError}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Trabajo (Asignado)</label>
+                                 <input
+                                    type="text"
+                                    value={subOrder.workType || ''}
+                                    className="mt-1 w-full p-2 bg-gray-100 dark:bg-gray-700/50 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none cursor-not-allowed"
+                                    readOnly
+                                    disabled
+                                />
                             </div>
-                         )}
-                    </div>
-                    <div className="mt-6 flex justify-end space-x-4">
-                        <button type="button" onClick={onClose} className="py-2 px-4 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500">Cancelar</button>
-                        <button type="submit" className="py-2 px-4 bg-brand-primary text-white rounded-md hover:bg-red-700">Guardar Cambios</button>
-                    </div>
-                </form>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre del Trabajo / Servicio</label>
+                                <input
+                                    type="text"
+                                    name="taskName"
+                                    value={formData.taskName}
+                                    onChange={handleChange}
+                                    className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
+                                    placeholder="Ej: Impresión de Lona, Spot de Radio 30s"
+                                    readOnly={isReadOnly}
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción de Tarea (Asignada por Dir. Comercial)</label>
+                                <textarea
+                                    name="description"
+                                    value={subOrder.description || ''}
+                                    rows={3}
+                                    className="mt-1 w-full p-2 bg-gray-100 dark:bg-gray-700/50 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none cursor-not-allowed"
+                                    readOnly
+                                    disabled
+                                />
+                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    La descripción de la tarea es asignada por el Director Comercial y no puede ser modificada.
+                                </p>
+                            </div>
+                            <div className="p-3 mb-2 bg-blue-50 dark:bg-blue-900/30 rounded-md border border-blue-200 dark:border-blue-800">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="font-semibold text-blue-800 dark:text-blue-200">Presupuesto asignado a esta tarea:</span>
+                                    <span className="font-bold text-blue-900 dark:text-blue-100">{formatCurrency(effectiveBudget)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm mt-1">
+                                    <span className="text-gray-600 dark:text-gray-400">Monto total cotizado para la orden:</span>
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">{formatCurrency(parentOrder.quotedAmount)}</span>
+                                </div>
+                            </div>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto de Tarea (Presupuesto)</label>
+                                    <input
+                                        type="number"
+                                        name="amount"
+                                        value={formData.amount}
+                                        onChange={handleChange}
+                                        className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
+                                        required
+                                        readOnly={isReadOnly}
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                </div>
+                                 <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Monto Gastado (Referencia)</label>
+                                    <input
+                                        type="number"
+                                        name="spentAmount"
+                                        value={formData.spentAmount}
+                                        onChange={handleChange}
+                                        className="mt-1 w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="Costo interno (opcional)"
+                                    />
+                                </div>
+                            </div>
+                                {/* Discrepancy/Surplus Indicator */}
+                                {!isReadOnly && Math.abs(difference) > 0.01 && (
+                                    <div className={`mt-2 p-2 rounded-md text-sm flex items-start ${difference > 0 ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300' : 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300'}`}>
+                                        <WarningIcon className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="font-semibold">
+                                                {difference > 0 ? 'Excedente' : 'Discrepancia'}: {formatCurrency(Math.abs(difference))}
+                                            </p>
+                                            <p className="text-xs">Se notificará al Director Comercial sobre este ajuste para su revisión.</p>
+                                        </div>
+                                    </div>
+                                )}
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones (Opcional)</label>
+                                <textarea
+                                    name="observations"
+                                    value={formData.observations}
+                                    onChange={handleChange}
+                                    rows={3}
+                                    className={`mt-1 w-full p-2 border rounded-md focus:outline-none ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-brand-primary'}`}
+                                    readOnly={isReadOnly}
+                                />
+                            </div>
+
+                            {formError && (
+                                <div className="flex items-center text-red-600 dark:text-red-400 p-2 mt-2 bg-red-50 dark:bg-red-900/20 rounded-md text-sm">
+                                    <WarningIcon className="w-5 h-5 mr-2" />
+                                    {formError}
+                                </div>
+                             )}
+                        </div>
+                    </form>
+                </main>
+                <footer className="p-4 flex justify-end space-x-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+                    <button type="button" onClick={onClose} className="py-2 px-4 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500">Cancelar</button>
+                    <button type="submit" form="edit-suborder-form" className="py-2 px-4 bg-brand-primary text-white rounded-md hover:bg-red-700">Guardar Cambios</button>
+                </footer>
             </div>
         </div>
     );

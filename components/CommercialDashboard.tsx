@@ -82,6 +82,8 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
     });
     const [isUnitDropdownOpen, setUnitDropdownOpen] = useState(false);
     const unitDropdownRef = useRef<HTMLDivElement>(null);
+    const [isExportMenuOpen, setExportMenuOpen] = useState(false);
+    const exportMenuRef = useRef<HTMLDivElement>(null);
     
     // State for the operational table filters
     const [tableFilters, setTableFilters] = useState<{
@@ -111,6 +113,9 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
         const handleClickOutside = (event: MouseEvent) => {
             if (unitDropdownRef.current && !unitDropdownRef.current.contains(event.target as Node)) {
                 setUnitDropdownOpen(false);
+            }
+            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+                setExportMenuOpen(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
@@ -248,6 +253,41 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
         });
     };
     
+    const handleExportExcel = () => {
+        const XLSX = (window as any).XLSX;
+        if (filteredTableData.length === 0) {
+            alert("No hay datos en la tabla para exportar.");
+            setExportMenuOpen(false);
+            return;
+        }
+        const dataToExport = filteredTableData.map(item => ({
+            'No. Orden': item.orderNumber, 
+            'Cliente': item.client, 
+            'Fecha Creación': item.creationDate,
+            'Monto Cotizado': item.quotedAmount, 
+            'No. Sub-Orden': item.subOrderNumber, 
+            'Unidad': item.unit,
+            'Tipo Trabajo (Tarea)': item.workType, 
+            'Descripción (Tarea)': item.description, 
+            'Monto (Tarea)': item.amount,
+            'Estado (Tarea)': item.status, 
+            'No. Factura Gral.': item.invoiceNumber, 
+            'Fecha Factura': item.invoiceDate,
+            'Monto Factura': item.invoiceTotalAmount, 
+            'Método Pago': item.paymentMethod, 
+            'Fecha Pago': item.paymentDate,
+            'Monto Pagado': item.paidAmount, 
+            'Saldo Pendiente': (item.invoiceTotalAmount || 0) - (item.paidAmount || 0),
+            'Director': item.director, 
+            'Ejecutivo': item.executive
+        }));
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Órdenes');
+        XLSX.writeFile(workbook, `Reporte_Ordenes_${directorName.replace(/\s/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        setExportMenuOpen(false);
+    };
+
     const handleExportPDF = () => {
         const { jsPDF } = (window as any).jspdf;
         const doc = new jsPDF();
@@ -388,6 +428,7 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
 
 
         doc.save(`Reporte_Ventas_${directorName}_${new Date().toISOString().split('T')[0]}.pdf`);
+        setExportMenuOpen(false);
     };
 
     return (
@@ -398,10 +439,27 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
                         <ChartBarIcon className="w-7 h-7 text-brand-primary" />
                         Reporte de Ventas
                     </h2>
-                    <button onClick={handleExportPDF} className="flex items-center text-sm bg-gray-700 hover:bg-gray-800 dark:bg-gray-200 dark:hover:bg-white text-white dark:text-gray-800 font-semibold py-2 px-4 rounded-md transition-colors">
-                        <DownloadIcon className="w-4 h-4 mr-2" />
-                        Exportar a PDF
-                    </button>
+                     <div className="relative" ref={exportMenuRef}>
+                        <button onClick={() => setExportMenuOpen(prev => !prev)} className="flex items-center text-sm bg-gray-700 hover:bg-gray-800 dark:bg-gray-200 dark:hover:bg-white text-white dark:text-gray-800 font-semibold py-2 px-4 rounded-md transition-colors">
+                            <DownloadIcon className="w-4 h-4 mr-2" />
+                            Exportar Reporte
+                            <ChevronDownIcon className={`w-4 h-4 ml-2 transition-transform ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        {isExportMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg z-20 ring-1 ring-black ring-opacity-5">
+                                <div className="py-1">
+                                    <button onClick={handleExportPDF} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
+                                        <DocumentIcon className="w-4 h-4 mr-3 text-red-500" />
+                                        Exportar a PDF
+                                    </button>
+                                    <button onClick={handleExportExcel} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
+                                        <DownloadIcon className="w-4 h-4 mr-3 text-green-500" />
+                                        Exportar a Excel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

@@ -31,6 +31,12 @@ export enum UserRole {
     Gerencia = "Gerencia",
 }
 
+export interface Director {
+  name: string;
+  team: string;
+  password?: string;
+}
+
 export interface FinancialMovement {
   id: string;
   subOrderId?: string; // Can be linked to a sub-order

@@ -118,6 +118,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
         onFilteredDataChange(filteredData);
     }, [filteredData, onFilteredDataChange]);
 
+    // FIX: Removed unreachable code block that was causing a TypeScript error.
+    // The parent component `App.tsx` ensures this Dashboard component is never rendered for the `Comercial` role.
+    /*
+    if (currentUserRole === UserRole.Comercial) {
+        return null; // The table is now inside CommercialDashboard for this role
+    }
+    */
 
     return (
         <main>
@@ -132,7 +139,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
                     filters={filters} 
                     setFilters={setFilters} 
                     isUnitDirector={currentUserRole === UserRole.Unidad}
-                    isCommercialDirector={currentUserRole === UserRole.Comercial}
+                    isCommercialDirector={false}
                     directors={directors}
                     executives={executives}
                 />

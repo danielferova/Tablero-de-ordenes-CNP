@@ -1,10 +1,4 @@
-
-
-
-
-
-
-import { Order, SubOrder, Unit, PaymentMethod, OrderStatus, FinancialMovement } from '../types';
+import { Order, SubOrder, Unit, PaymentMethod, OrderStatus, FinancialMovement, Director } from '../types';
 import { initializeApp } from 'firebase/app';
 import {
     getFirestore,
@@ -157,8 +151,27 @@ function createNameListener(collectionRef: any, collectionName: string) {
 }
 
 export const listenToClients = createNameListener(clientsCollection, 'clients');
-export const listenToDirectors = createNameListener(directorsCollection, 'directors');
 export const listenToExecutives = createNameListener(executivesCollection, 'executives');
+
+export function listenToDirectors(callback: (directors: Director[]) => void) {
+    const unsubscribe = onSnapshot(directorsCollection, (snapshot) => {
+        const directorData = snapshot.docs
+            .map(doc => {
+                const data = doc.data();
+                return {
+                    name: data.name,
+                    team: data.team,
+                    password: data.password
+                } as Director;
+            })
+            .filter((dir): dir is Director => typeof dir.name === 'string' && dir.name.length > 0);
+        
+        callback(directorData.sort((a, b) => a.name.localeCompare(b.name)));
+    }, (error) => {
+        console.error(`Error listening to directors collection: `, error);
+    });
+    return unsubscribe;
+}
 
 export function listenToUnits(callback: (units: { name: Unit, password: string }[]) => void) {
     const unsubscribe = onSnapshot(unitsCollection, (snapshot) => {
@@ -296,9 +309,21 @@ export async function updateOrderFinances(
     });
 
     movementsToUpdate.forEach(movement => {
-        const { id: movementId, ...movementData } = movement;
-        const movementDocRef = doc(db, 'financialMovements', movementId);
-        batch.update(movementDocRef, movementData as { [key: string]: any });
+        const movementDocRef = doc(db, 'financialMovements', movement.id);
+        // FIX: Create a clean data object to prevent circular reference errors.
+        // Instead of spreading the potentially complex 'movement' object, we explicitly
+        // map only the properties defined in the FinancialMovement interface.
+        const cleanMovementData = {
+            subOrderId: movement.subOrderId,
+            orderId: movement.orderId,
+            invoiceNumber: movement.invoiceNumber,
+            invoiceDate: movement.invoiceDate,
+            invoiceAmount: movement.invoiceAmount,
+            paymentDate: movement.paymentDate,
+            paidAmount: movement.paidAmount,
+            creationDate: movement.creationDate,
+        };
+        batch.update(movementDocRef, cleanMovementData);
     });
     
     movementsToDelete.forEach(movement => {
@@ -351,6 +376,64 @@ async function seedCollectionIfEmpty(collectionRef: any, collectionName: string,
     }
 }
 
+async function seedDirectors() {
+    const directorsToSeed = [
+        { name: "Michael Marizuya", team: "Equipo Senior", password: "senior123", name_lowercase: "michael marizuya" },
+        { name: "Pedro Luis Martinez", team: "Equipo Junior", password: "junior123", name_lowercase: "pedro luis martinez" }
+    ];
+
+    const snapshot = await getDocs(directorsCollection);
+    
+    if (snapshot.empty) {
+        console.log("Directors collection is empty. Seeding initial directors with credentials...");
+        const batch = writeBatch(db);
+        directorsToSeed.forEach(dir => {
+            const docRef = doc(directorsCollection);
+            batch.set(docRef, dir);
+        });
+        await batch.commit();
+        console.log(`${directorsToSeed.length} directors seeded successfully.`);
+    } else {
+        console.log("Directors collection exists. Checking for missing fields...");
+        const batch = writeBatch(db);
+        let updatesMade = false;
+        
+        const existingDirectors = new Map<string, { id: string; data: any }>();
+        snapshot.docs.forEach(doc => {
+            existingDirectors.set(doc.data().name_lowercase, { id: doc.id, data: doc.data() });
+        });
+
+        directorsToSeed.forEach(seedDir => {
+            const existingDoc = existingDirectors.get(seedDir.name_lowercase);
+            if (existingDoc) {
+                // Document exists, check if password or team is missing
+                if (!existingDoc.data.password || !existingDoc.data.team) {
+                    console.log(`Updating director: ${seedDir.name}`);
+                    const docRef = doc(db, 'directors', existingDoc.id);
+                    batch.update(docRef, {
+                        team: seedDir.team,
+                        password: seedDir.password
+                    });
+                    updatesMade = true;
+                }
+            } else {
+                // Document does not exist, so we should create it.
+                console.log(`Creating missing director: ${seedDir.name}`);
+                const docRef = doc(directorsCollection);
+                batch.set(docRef, seedDir);
+                updatesMade = true;
+            }
+        });
+
+        if (updatesMade) {
+            await batch.commit();
+            console.log("Director data updated successfully.");
+        } else {
+            console.log("All director data is up to date.");
+        }
+    }
+}
+
 async function seedUnits() {
     const snapshot = await getDocs(query(unitsCollection, limit(1)));
     if (snapshot.empty) {
@@ -373,11 +456,6 @@ async function seedUnits() {
 
 const seedClients = () => seedCollectionIfEmpty(clientsCollection, 'Clients', [
     "& CAFÉ", "12+12", "ABBOT", "Acces Media", "ACREDICOM", "ADICLA", "AG Automotriz", "Agencias Way", "AHORRENT", "AIWA", "Akí", "Al Cilantro", "Aldo Nero", "Alexis Bargeles / Restaurante El Marinero.", "ALMACENES JAPON", "Aloe Vera", "Ambev", "Ambrella", "Amigo Presta", "Amore", "Andrea Arroyave / El Zeppelin", "Andrea Ríos / La Butik clothe & more", "Anfora", "ANIMOTION", "Antillon", "APROFAM", "Aracely Ajanel/ Ceramica Castelli.", "AUTO FIX PANTALLAS LED", "AUTOMOTRIS XELA PANTALLAS LED", "Azote BG", "BAC", "Banco Azteca", "Banco Cuscatlan", "Banco de Antigua", "Banco GYT Continental", "Banco Industrial", "Banrural", "Bantrab", "BAYER", "Bectris", "BMP AUTO PARTES PANTALLAS LED", "BMW", "Bounty Hunter", "Brander´s", "Busch Light", "Calera San Miguel", "Camara de Comercio", "Camara de Construcción", "Camas Fontex", "Campero", "Cantonesa", "Carlos Ruedas/ Serteco & Villas el Nido", "Carnaval", "Carolina Ríos/ Gobernación Departamental Quetgo.", "Casa del Ron", "Casa instrumental", "Casa Solar", "Cecodent", "CEI", "Cemaco", "Cementos Progreso", "CEMGUA", "Central de Medios", "Centro comercial Los Altos de Totonicapan", "Centro comercial Los Celajes", "CENTRO DENTAL TOOTH", "Centro Dermatológico de Occidente (CDO)", "Centro Odontológico Joy Dental", "Ceramipisos", "Cerveceria nacional", "Changan", "Chery", "Chicote", "Chiva Prenda", "CHN", "Claro", "COCA COLA", "Colegio Claremont", "Colegio El Pilar", "Colegio Inevoc", "Colegio La Patria", "Colegio Maria Auxiliadora", "Colegio Monte Verde", "Colegio Pino Montano", "Colegio Q'anill", "Colegio Salamanca", "Colua", "CONTINENTAL MOTORS", "Controlingooh", "Cool", "COOPERATIVA 31 DE JULIO", "Cooperativa Coopach", "COOPERATIVA COPELIBER R.L PANTALLASS LED", "COOPERATIVA CRECECOPE PANTALLAS LDE", "Cooperativa Ecosaba", "COPECHAPIN R.L RRSS", "COPEOORO", "Copeoro RL", "Coralsa", "Corium", "CORPORACIÓN AVANZA", "COSAMI ES MI COPE / CAMIONES VALLA / PANTALALS LED", "Creatbot", "CREDICHAPIN", "CREDIGUATE", "CREDIMARQ", "Credimás", "CREDIMAS + ESPERANZA RRSS / PANTALLAS LED", "CRUZ VERDE", "Cubata", "CUIK", "Curacao", "d4 McCann", "Daniel Quijivix / Laboratorio Inmunotest", "D'Antoni", "De La Granja", "Del Frutal", "Del Monte", "Delicia", "DISMACO DISTRIBUIDORA PANTALLAS LED", "DM OCCIDENTE PANTALLAS LED", "DOMINOS EXPRESS", "DOMINOS PIZZA", "Don Franklin", "Doña Ody", "DPCrea", "Dra Glendy Sum", "Ducal", "DUNKIN´DUNUTS", "Dynant", "Eagle Media", "Eco Resort Samalá", "Ecofiltro", "Econosuper", "El Arenal", "EL CAFETALITO", "El Gallo Mas Gallo", "Elecktra", "Electroma", "Emilio López/ Buckle", "EMISORAS UNIDAS", "Emporium", "Energuate", "Enrique Cay / Estudio de Arte Cay", "EPA", "Esto es Marte", "Etrog", "FABRICA DECORA XELA PANTALLAS LED", "FARMA COSTO", "FARMACIAS BATRES", "Feat", "FERCO", "Fernando de León/ Taller C&V", "FETICHE PRADERA XELA PANTALLAS LED", "FFACSA", "Ficohsa", "Filemón", "Finca La Azotea", "Finca la soledad/ Jimena Fuentes", "Foremost", "FREEDOM", "Friapp", "Fritolay", "Fulano Sutano", "Fundea", "G&T", "Gabriela Camas/ Neurodiagnostico", "Gallo", "Gamma", "Genesis empresarial", "Good Modd", "Granjero", "Grapete", "Grupo Construferro", "Grupo MeMe", "GRUPO MASTER", "Grupo Onyx", "Grupo Q", "H. Alvarez", "Havas", "Hospital totonicapan", "HOTEL LOS ARCOS PANTALLAS LED / RRSS", "House Dentsu", "HS Centro", "Hyundai", "Idealsa", "Ina", "Intecap", "INTERCOP", "Irtra", "Issima", "J. Gutierrez / Motos Haohue", "Jairo Daniel/ App Ziengo", "Jessica Castillo/ Gerente Comercial Cayala.", "JIM", "JLMarketing", "Johana Calvillo / Salon de Belleza Acuarius.", "Kalea", "KAPITAL SOLUCIONES PANTALLAS LED", "KATO KI", "Kern´s", "Kid Planeta", "L´IMAGE INTERPLAZA PANTALLAS LED", "La Colonia", "LA CURACAO", "La Hacienda Del Chef", "La Luna", "La Sevillana", "La Torre", "LA TRONADORA", "Lafabrica&jotabequ", "Lala", "Lala Kids", "LATAM", "Le Bolsha", "Lecleire", "Leticia Rojas / Excel Automotriz FUSO", "LEVUNI", "LICORES DE GUATEMALA", "Little Caesar´s", "LOCOS DE ASAR", "LSUD", "Macdonals", "Maderas San Miguel", "Magic Touch", "Mansión Los Guichos", "Maravilla", "Marcela Girón/ Eventos HAMA", "Marinero", "MARIOT´S BOUTIQUE", "Marlon Rodriguez/ Gourmet", "Marsa", "Maty & Paul", "MAX", "Mayatour", "Mazda", "Mazola", "MCI", "Media Naranja", "Media Partners", "Medios&Mas", "MEGA BLOCK", "MEGA SHOES", "MEGATRONCH´S", "Mevecon", "Mi casita Montesori", "Miguel de León Regil / Hospital Veterinario Zoo Mascota", "Ministerio de Gobernación", "Modelo", "Molinos Modernos", "Mosca", "Mostro", "MOTOPLUS", "Motoresa", "MULTIMATERIALES PANTALLAS LED", "MUNICIPALIDAD DE LA ESPERANZA", "Muriel Feterman/ Muriel Postres", "NESCAFE", "Nestle", "Norcom", "Nube Blanca", "Nueva Esperanza", "Nutry Lety", "Ogilvy", "OMD", "OPTICA LOURDES PANTALLAS LED", "Optical Center", "Osberto Aguilar/ Laboratorio Aguilar", "Pablo Galicia/ Colegio Salamanca", "Palm Era", "Panamericana", "Papa John's", "PAPELERA INTERNACIONAL", "PATSY RESTAURANTE", "Pedidos ya", "Pepsi", "Peter Jordan", "PeYa", "PHARA", "PHD", "PICACIA", "PICADILY PANTALLAS LED", "PICK A POKE XELA", "Pieles y Napas de Occidente", "PINTER PANTALLAS", "Pizza Hut", "PLAZA 7 RRSS", "Pollolandia", "PRADERA XELA PANRTALLAS LED", "Pricesmart", "Progreso", "Promerica", "Publicidad Comercial", "Publinac", "Puma", "Quinta de las flores", "Raptor", "Red Azul", "Repuestos alvarez", "Restaurante Don Andres", "RESTAURANTE EL POTRERO RRSS / PANTALLAS LED", "Revive", "Rodrigo Echeverria/ Monster", "Roobik", "ROSAL", "Rufo", "Saatchi", "Salamanca", "Salvavidas", "SANITISU", "SANTA CRUZ R.L", "Santa Delfina", "Saúl", "Schell", "SCOTT PAPEL PANTALLAS LED", "Sears", "Seguros Universales", "Senator", "Señorial", "SERVI", "Sherwin williams", "Siboney", "Siciliana", "Sinergia", "SISA Seguros de Guatemala", "SISTEGUA", "Sitesa", "Smartfit", "SOLAR CITY", "Starcom", "Stephany Licardié (Mediadora)", "Sublime", "Suma", "Super del Barrio", "TACOS EL PORTON PANTALLAS LED", "Tacticas", "Talishte", "Tampico", "Tatiana Camposeco/ Psicoclínica", "TAYTEC RRSS", "TBWA RIOT", "Te del Monte", "Teatro THRIAMBOS", "Tecnofácil", "Texaco", "TEXACO- GRUPO PERZA", "Tiendas El Tejar", "Tigo", "Tiky", "TMU ROPA PANTALLAS LED", "Top Publicidad", "TORETES RESTAURANTES LED", "TRE FRATELLI", "Tropigas", "TV AZTECA", "TVS", "UDEO", "ULTRACEM", "UMG", "Unicomer", "UNIMARCKS S.A XELA PANTALLAS LED", "Union Export", "UNIPHARM", "UNIVERSIDAD DA VINCI", "UNIVERSIDAD DEL VALLE", "UNIVERSIDAD GALILEO", "UNIVERSIDAD MESOAMERICANA", "UNO", "UPA", "Vana", "Venite", "Venza", "VESUVIO", "Villeda", "WASH & DRIVE PANTALLAS LED", "WCA", "Wendy´s", "YA ESTA", "YAMAHA MOTOS", "Yoko", "Zixx"
-]);
-
-const seedDirectors = () => seedCollectionIfEmpty(directorsCollection, 'Directors', [
-    "Michael Marizuya",
-    "Pedro Luis Martinez"
 ]);
 
 const seedExecutives = () => seedCollectionIfEmpty(executivesCollection, 'Executives', [

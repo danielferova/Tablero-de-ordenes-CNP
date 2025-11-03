@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Order, SubOrder, Unit, UserRole, OrderStatus, PaymentMethod, FinancialMovement } from './types';
+import { Order, SubOrder, Unit, UserRole, OrderStatus, PaymentMethod, FinancialMovement, Director } from './types';
 import Dashboard from './components/Dashboard';
 import NewOrderModal from './components/NewOrderModal';
 import EditSubOrderModal from './components/EditSubOrderModal';
@@ -18,6 +18,7 @@ import NotificationsPanel from './components/NotificationsPanel';
 import { UNIT_CONTACTS } from './constants';
 import NotifyPaymentModal, { PaymentNotificationDetails } from './components/NotifyPaymentModal';
 import AdjustBudgetModal from './components/AdjustBudgetModal';
+import CommercialDashboard from './components/CommercialDashboard';
 
 // Helper functions to create clean, plain JavaScript objects from complex Firestore objects.
 // This prevents "Converting circular structure to JSON" errors when setting state for modals or dev tools.
@@ -90,7 +91,7 @@ const App: React.FC = () => {
     const [subOrders, setSubOrders] = useState<SubOrder[]>([]);
     const [financialMovements, setFinancialMovements] = useState<FinancialMovement[]>([]);
     const [clients, setClients] = useState<string[]>([]);
-    const [directors, setDirectors] = useState<string[]>([]);
+    const [directors, setDirectors] = useState<Director[]>([]);
     const [executives, setExecutives] = useState<string[]>([]);
     const [isNewOrderModalOpen, setNewOrderModalOpen] = useState(false);
     const [isEditSubOrderModalOpen, setEditSubOrderModalOpen] = useState(false);
@@ -126,8 +127,8 @@ const App: React.FC = () => {
             setClients(clientNames);
         });
 
-        const unsubscribeDirectors = db.listenToDirectors((directorNames) => {
-            setDirectors(directorNames);
+        const unsubscribeDirectors = db.listenToDirectors((directorData) => {
+            setDirectors(directorData);
         });
 
         const unsubscribeExecutives = db.listenToExecutives((executiveNames) => {
@@ -846,7 +847,7 @@ const App: React.FC = () => {
                                 allSubOrders={subOrders}
                                 allFinancialMovements={financialMovements}
                                 allClients={clients}
-                                allDirectors={directors}
+                                allDirectors={directors.map(d => d.name)}
                                 allExecutives={executives}
                                 managementFilters={{
                                     unitFilter: managementUnitFilter,
@@ -868,6 +869,21 @@ const App: React.FC = () => {
                     </div>
                 </header>
 
+                {currentUserRole === UserRole.Comercial && currentUserDirectorName && (
+                     <CommercialDashboard
+                        data={processedData}
+                        subOrderFinancials={subOrderFinancials}
+                        directorName={currentUserDirectorName}
+                        onEdit={handleEditClick}
+                        onAddSubOrder={handleAddSubOrderClick}
+                        onNotifyPayment={handleNotifyPaymentClick}
+                        onAdjustBudget={handleAdjustBudgetClick}
+                        onFilteredDataChange={setFilteredDataForExport}
+                        directors={directors.map(d => d.name)}
+                        executives={executives}
+                    />
+                )}
+
                 {(currentUserRole === UserRole.Gerencia || currentUserRole === UserRole.Finanzas) && (
                     <div>
                         <ManagementDashboard 
@@ -875,7 +891,7 @@ const App: React.FC = () => {
                             subOrders={subOrders}
                             financialMovements={financialMovements}
                             clients={clients}
-                            directors={directors}
+                            directors={directors.map(d => d.name)}
                             executives={executives}
                             subOrderFinancials={subOrderFinancials}
                             filters={{
@@ -893,21 +909,23 @@ const App: React.FC = () => {
                         />
                     </div>
                 )}
-
-                <Dashboard 
-                    data={processedData} 
-                    onEdit={handleEditClick} 
-                    currentUserRole={currentUserRole}
-                    currentUserUnit={currentUserUnit}
-                    currentUserDirectorName={currentUserDirectorName}
-                    onAddSubOrder={handleAddSubOrderClick}
-                    onFilteredDataChange={setFilteredDataForExport}
-                    onNotifyPayment={handleNotifyPaymentClick}
-                    subOrderFinancials={subOrderFinancials}
-                    directors={directors}
-                    executives={executives}
-                    onAdjustBudget={handleAdjustBudgetClick}
-                />
+                
+                {currentUserRole !== UserRole.Comercial && (
+                    <Dashboard 
+                        data={processedData} 
+                        onEdit={handleEditClick} 
+                        currentUserRole={currentUserRole}
+                        currentUserUnit={currentUserUnit}
+                        currentUserDirectorName={currentUserDirectorName}
+                        onAddSubOrder={handleAddSubOrderClick}
+                        onFilteredDataChange={setFilteredDataForExport}
+                        onNotifyPayment={handleNotifyPaymentClick}
+                        subOrderFinancials={subOrderFinancials}
+                        directors={directors.map(d => d.name)}
+                        executives={executives}
+                        onAdjustBudget={handleAdjustBudgetClick}
+                    />
+                )}
             </div>
 
             {isNewOrderModalOpen && (
@@ -915,7 +933,7 @@ const App: React.FC = () => {
                     onClose={() => setNewOrderModalOpen(false)}
                     onSubmit={handleCreateOrder}
                     clients={clients}
-                    directors={directors}
+                    directors={directors.map(d => d.name)}
                     executives={executives}
                 />
             )}

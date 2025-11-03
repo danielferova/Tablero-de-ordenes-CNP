@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { UserRole, Unit } from '../types';
+import { UserRole, Unit, Director } from '../types';
 import { Logo } from './Logo';
 import * as db from '../services/database';
 
@@ -20,31 +19,32 @@ const genericRolePasswords: { [key: string]: UserRole } = {
   'gerencia123': UserRole.Gerencia,
 };
 
-const directorPasswords: { [key: string]: { name: string; team: string } } = {
-  'senior123': { name: 'Michael Marizuya', team: 'Equipo Senior' },
-  'junior123': { name: 'Pedro Luis Martinez', team: 'Equipo Junior' },
-};
-
-
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [unitCredentials, setUnitCredentials] = useState<UnitCredential[]>([]);
+  const [directorCredentials, setDirectorCredentials] = useState<Director[]>([]);
   
   useEffect(() => {
-    // Listen to unit credentials from Firestore
-    const unsubscribe = db.listenToUnits((fetchedUnits) => {
+    const unsubscribeUnits = db.listenToUnits((fetchedUnits) => {
         setUnitCredentials(fetchedUnits);
     });
-    // Cleanup listener on component unmount
-    return () => unsubscribe();
+    
+    const unsubscribeDirectors = db.listenToDirectors((fetchedDirectors) => {
+        setDirectorCredentials(fetchedDirectors);
+    });
+
+    return () => {
+        unsubscribeUnits();
+        unsubscribeDirectors();
+    };
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const genericRole = genericRolePasswords[password];
     const unitCredential = unitCredentials.find(cred => cred.password === password);
-    const directorCredential = directorPasswords[password];
+    const directorCredential = directorCredentials.find(cred => cred.password === password);
 
     if (genericRole) {
       onLogin(genericRole);

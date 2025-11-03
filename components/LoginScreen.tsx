@@ -5,7 +5,7 @@ import { Logo } from './Logo';
 import * as db from '../services/database';
 
 interface LoginScreenProps {
-  onLogin: (role: UserRole, unit?: Unit) => void;
+  onLogin: (role: UserRole, options?: { unit?: Unit; directorName?: string; directorTeam?: string }) => void;
 }
 
 interface UnitCredential {
@@ -16,9 +16,13 @@ interface UnitCredential {
 // NOTE: Hardcoding passwords like this is insecure and for demonstration purposes only.
 // In a real application, use a proper authentication backend.
 const genericRolePasswords: { [key: string]: UserRole } = {
-  'comercial123': UserRole.Comercial,
   'finanzas123': UserRole.Finanzas,
   'gerencia123': UserRole.Gerencia,
+};
+
+const directorPasswords: { [key: string]: { name: string; team: string } } = {
+  'senior123': { name: 'Michael Marizuya', team: 'Equipo Senior' },
+  'junior123': { name: 'Pedro Luis Martinez', team: 'Equipo Junior' },
 };
 
 
@@ -40,11 +44,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     e.preventDefault();
     const genericRole = genericRolePasswords[password];
     const unitCredential = unitCredentials.find(cred => cred.password === password);
+    const directorCredential = directorPasswords[password];
 
     if (genericRole) {
       onLogin(genericRole);
     } else if (unitCredential) {
-      onLogin(UserRole.Unidad, unitCredential.name);
+      onLogin(UserRole.Unidad, { unit: unitCredential.name });
+    } else if (directorCredential) {
+      onLogin(UserRole.Comercial, { directorName: directorCredential.name, directorTeam: directorCredential.team });
     } else {
       setError('Contraseña incorrecta. Por favor, intente de nuevo.');
       setPassword('');

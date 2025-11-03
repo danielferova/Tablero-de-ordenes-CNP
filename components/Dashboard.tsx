@@ -11,6 +11,7 @@ interface DashboardProps {
     onEdit: (subOrderId: string, orderId: string) => void;
     currentUserRole: UserRole;
     currentUserUnit: Unit | null;
+    currentUserDirectorName: string | null;
     onAddSubOrder: (order: Order) => void;
     onFilteredDataChange: (data: FullOrderData[]) => void;
     onNotifyPayment: (order: Order) => void;
@@ -20,7 +21,7 @@ interface DashboardProps {
     onAdjustBudget: (order: Order) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, onAddSubOrder, onFilteredDataChange, onNotifyPayment, subOrderFinancials, directors, executives, onAdjustBudget }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, currentUserDirectorName, onAddSubOrder, onFilteredDataChange, onNotifyPayment, subOrderFinancials, directors, executives, onAdjustBudget }) => {
     const [filters, setFilters] = useState<{
         unit: Unit[];
         status: string;
@@ -44,15 +45,17 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
     });
 
     const filteredData = useMemo(() => {
-        // Step 1: Establish the base dataset. For a Unit Director, this means finding all orders they are part of.
+        // Step 1: Establish the base dataset. Filter by role first.
         let baseData = data;
         if (currentUserRole === UserRole.Unidad && currentUserUnit) {
-            // Find all unique order IDs that this unit is involved in.
+            // A Unit Director sees all sub-orders for any order they are involved in.
             const relevantOrderIds = new Set(
                 data.filter(item => item.unit === currentUserUnit).map(item => item.orderId)
             );
-            // The base data becomes all sub-orders (from all units) belonging to those relevant orders.
             baseData = data.filter(item => relevantOrderIds.has(item.orderId));
+        } else if (currentUserRole === UserRole.Comercial && currentUserDirectorName) {
+            // A Commercial Director only sees orders assigned to them.
+            baseData = data.filter(item => item.director === currentUserDirectorName);
         }
 
         // Pre-calculate overall status for each order within the base dataset
@@ -95,8 +98,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
             if (startDate && itemDate < startDate) return false;
             if (endDate && itemDate > endDate) return false;
 
-            // The unit and director dropdown filters are only applied for non-unit-director roles.
-            if (currentUserRole !== UserRole.Unidad) {
+            // The unit, director, and executive dropdown filters are disabled for role-specific views.
+            if (currentUserRole === UserRole.Finanzas || currentUserRole === UserRole.Gerencia) {
                 if (filters.unit.length > 0 && !filters.unit.includes(item.unit as Unit)) return false;
                 if (filters.director !== 'all' && item.director !== filters.director) return false;
                 if (filters.executive !== 'all' && item.executive !== filters.executive) return false;
@@ -109,7 +112,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
 
             return true;
         });
-    }, [data, filters, currentUserRole, currentUserUnit]);
+    }, [data, filters, currentUserRole, currentUserUnit, currentUserDirectorName]);
 
     useEffect(() => {
         onFilteredDataChange(filteredData);
@@ -129,6 +132,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
                     filters={filters} 
                     setFilters={setFilters} 
                     isUnitDirector={currentUserRole === UserRole.Unidad}
+                    isCommercialDirector={currentUserRole === UserRole.Comercial}
                     directors={directors}
                     executives={executives}
                 />

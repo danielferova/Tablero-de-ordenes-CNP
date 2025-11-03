@@ -15,6 +15,7 @@ export enum PaymentMethod {
   Credito = "Crédito",
   Anticipo = "Anticipo",
   Contado = "Contado",
+  TrabajosInternos = "Trabajos Internos",
 }
 
 export enum OrderStatus {

@@ -77,12 +77,15 @@ export interface AppNotification {
     read: boolean;
     roleTarget: UserRole[];
     unitTarget?: Unit[];
+    directorTarget?: string[];
 }
 
 const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [currentUserRole, setCurrentUserRole] = useState<UserRole | null>(null);
     const [currentUserUnit, setCurrentUserUnit] = useState<Unit | null>(null);
+    const [currentUserDirectorName, setCurrentUserDirectorName] = useState<string | null>(null);
+    const [currentUserDirectorTeam, setCurrentUserDirectorTeam] = useState<string | null>(null);
     const [orders, setOrders] = useState<Order[]>([]);
     const [subOrders, setSubOrders] = useState<SubOrder[]>([]);
     const [financialMovements, setFinancialMovements] = useState<FinancialMovement[]>([]);
@@ -140,10 +143,16 @@ const App: React.FC = () => {
     }, []);
 
 
-    const handleLogin = (role: UserRole, unit?: Unit) => {
+    const handleLogin = (role: UserRole, options?: { unit?: Unit; directorName?: string; directorTeam?: string }) => {
         setCurrentUserRole(role);
-        if (unit) {
-            setCurrentUserUnit(unit);
+        if (options?.unit) {
+            setCurrentUserUnit(options.unit);
+        }
+        if (options?.directorName) {
+            setCurrentUserDirectorName(options.directorName);
+        }
+        if (options?.directorTeam) {
+            setCurrentUserDirectorTeam(options.directorTeam);
         }
         setIsAuthenticated(true);
     };
@@ -152,13 +161,15 @@ const App: React.FC = () => {
         setIsAuthenticated(false);
         setCurrentUserRole(null);
         setCurrentUserUnit(null);
+        setCurrentUserDirectorName(null);
+        setCurrentUserDirectorTeam(null);
     };
 
     const triggerNotification = (
         title: string,
         message: string,
         whatsappMessage: string,
-        details: { roleTarget: UserRole[], unitTarget?: Unit[] }
+        details: { roleTarget: UserRole[], unitTarget?: Unit[], directorTarget?: string[] }
     ) => {
         // Create persistent in-app notification
         const newNotification: AppNotification = {
@@ -169,6 +180,7 @@ const App: React.FC = () => {
             read: false,
             roleTarget: details.roleTarget,
             unitTarget: details.unitTarget,
+            directorTarget: details.directorTarget,
         };
         setNotifications(prev => [newNotification, ...prev]);
 
@@ -268,7 +280,7 @@ const App: React.FC = () => {
     
                 // Specific notification for Commercial Director about budget implications.
                 // This triggers if an amount is added for the first time OR if an existing amount is changed to create a discrepancy.
-                if ((originalAmount == null && newAmount > 0) || Math.abs(difference) > 0.01) {
+                if (parentOrder.director && ((originalAmount == null && newAmount > 0) || Math.abs(difference) > 0.01)) {
                     let message: string;
                     let whatsappMessageForCommercial: string;
                     let title: string;
@@ -288,7 +300,7 @@ const App: React.FC = () => {
                         title,
                         message,
                         whatsappMessageForCommercial,
-                        { roleTarget: [UserRole.Comercial, UserRole.Gerencia] }
+                        { roleTarget: [UserRole.Comercial, UserRole.Gerencia], directorTarget: [parentOrder.director] }
                     );
                 }
             } else {
@@ -380,12 +392,17 @@ const App: React.FC = () => {
             setEditingOrder(null);
 
             const whatsappMessage = `*[ACTUALIZACIÓN FINANCIERA: ${updatedOrder.orderNumber}]*\n\nFinanzas ha actualizado la información de la orden para *${updatedOrder.client}*. El estado de las tareas puede haber cambiado.\n\nPor favor, revisar el tablero.`;
+            const directorTarget = updatedOrder.director ? [updatedOrder.director] : [];
 
             triggerNotification(
                 "Orden Actualizada",
                 `La información financiera de la orden ${updatedOrder.orderNumber} ha sido actualizada.`,
                 whatsappMessage,
-                { roleTarget: [UserRole.Unidad, UserRole.Comercial, UserRole.Gerencia], unitTarget: finalSubOrders.map(so => so.unit) }
+                { 
+                    roleTarget: [UserRole.Unidad, UserRole.Comercial, UserRole.Gerencia], 
+                    unitTarget: finalSubOrders.map(so => so.unit),
+                    directorTarget: directorTarget,
+                }
             );
 
         } catch (error) {
@@ -747,12 +764,19 @@ const App: React.FC = () => {
         if (!currentUserRole) return [];
         return notifications.filter(n => {
             if (!n.roleTarget.includes(currentUserRole)) return false;
+            
             if (currentUserRole === UserRole.Unidad && n.unitTarget && n.unitTarget.length > 0) {
                 return n.unitTarget.includes(currentUserUnit!);
             }
+            
+            if (currentUserRole === UserRole.Comercial && n.directorTarget && n.directorTarget.length > 0) {
+                if (!currentUserDirectorName) return false;
+                return n.directorTarget.includes(currentUserDirectorName);
+            }
+
             return true;
         });
-    }, [notifications, currentUserRole, currentUserUnit]);
+    }, [notifications, currentUserRole, currentUserUnit, currentUserDirectorName]);
     
     const unreadCount = useMemo(() => userNotifications.filter(n => !n.read).length, [userNotifications]);
 
@@ -781,10 +805,12 @@ const App: React.FC = () => {
                     <div className="flex items-center space-x-4 mt-4 sm:mt-0">
                          <div className="text-right">
                             <p className="font-semibold text-gray-800 dark:text-white">
-                                {currentUserRole}
-                                {currentUserRole === UserRole.Unidad && currentUserUnit && ` - ${currentUserUnit}`}
+                               {currentUserDirectorTeam ? currentUserDirectorTeam : currentUserRole}
+                               {currentUserRole === UserRole.Unidad && currentUserUnit && ` - ${currentUserUnit}`}
                             </p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Sesión Iniciada</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {currentUserDirectorName ? currentUserDirectorName : 'Sesión Iniciada'}
+                            </p>
                          </div>
                          <div className="relative">
                             <button
@@ -873,6 +899,7 @@ const App: React.FC = () => {
                     onEdit={handleEditClick} 
                     currentUserRole={currentUserRole}
                     currentUserUnit={currentUserUnit}
+                    currentUserDirectorName={currentUserDirectorName}
                     onAddSubOrder={handleAddSubOrderClick}
                     onFilteredDataChange={setFilteredDataForExport}
                     onNotifyPayment={handleNotifyPaymentClick}

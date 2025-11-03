@@ -37,7 +37,8 @@ const AdjustBudgetModal: React.FC<AdjustBudgetModalProps> = ({ order, subOrders,
     };
 
     const totalAssigned = useMemo(() => {
-        return Object.values(budgetedAmounts).reduce((sum, amountStr) => {
+        // FIX: Explicitly type `reduce` parameters to prevent `unknown` type errors.
+        return Object.values(budgetedAmounts).reduce((sum: number, amountStr: string) => {
             const amount = parseFloat(amountStr);
             return sum + (isNaN(amount) ? 0 : amount);
         }, 0);

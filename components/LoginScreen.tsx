@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserRole, Unit, Director } from '../types';
+import { UserRole, Unit, Director, UnitCredential, SystemRoleCredential } from '../types';
 import { Logo } from './Logo';
 import * as db from '../services/database';
 
@@ -7,23 +7,12 @@ interface LoginScreenProps {
   onLogin: (role: UserRole, options?: { unit?: Unit; directorName?: string; directorTeam?: string }) => void;
 }
 
-interface UnitCredential {
-    name: Unit;
-    password: string;
-}
-
-// NOTE: Hardcoding passwords like this is insecure and for demonstration purposes only.
-// In a real application, use a proper authentication backend.
-const genericRolePasswords: { [key: string]: UserRole } = {
-  'finanzas123': UserRole.Finanzas,
-  'gerencia123': UserRole.Gerencia,
-};
-
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [unitCredentials, setUnitCredentials] = useState<UnitCredential[]>([]);
   const [directorCredentials, setDirectorCredentials] = useState<Director[]>([]);
+  const [systemRoles, setSystemRoles] = useState<SystemRoleCredential[]>([]);
   
   useEffect(() => {
     const unsubscribeUnits = db.listenToUnits((fetchedUnits) => {
@@ -34,20 +23,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         setDirectorCredentials(fetchedDirectors);
     });
 
+    const unsubscribeSystemRoles = db.listenToSystemRoles((fetchedRoles) => {
+        setSystemRoles(fetchedRoles);
+    });
+
     return () => {
         unsubscribeUnits();
         unsubscribeDirectors();
+        unsubscribeSystemRoles();
     };
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const genericRole = genericRolePasswords[password];
+    const systemRole = systemRoles.find(cred => cred.password === password);
     const unitCredential = unitCredentials.find(cred => cred.password === password);
     const directorCredential = directorCredentials.find(cred => cred.password === password);
 
-    if (genericRole) {
-      onLogin(genericRole);
+    if (systemRole) {
+      onLogin(systemRole.name as UserRole);
     } else if (unitCredential) {
       onLogin(UserRole.Unidad, { unit: unitCredential.name });
     } else if (directorCredential) {

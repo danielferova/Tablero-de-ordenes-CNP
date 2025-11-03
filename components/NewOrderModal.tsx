@@ -68,7 +68,8 @@ const NewOrderModal: React.FC<NewOrderModalProps> = ({ onClose, onSubmit, client
     }, [executiveInput, executives]);
 
     const totalAssignedAmount = useMemo(() => {
-        return Object.values(unitAmounts).reduce((sum, amountStr) => {
+        // FIX: Explicitly type `reduce` parameters to prevent `unknown` type errors.
+        return Object.values(unitAmounts).reduce((sum: number, amountStr: string) => {
             const amount = parseFloat(amountStr);
             return sum + (isNaN(amount) ? 0 : amount);
         }, 0);

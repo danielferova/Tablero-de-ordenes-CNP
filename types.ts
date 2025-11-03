@@ -37,6 +37,16 @@ export interface Director {
   password?: string;
 }
 
+export interface UnitCredential {
+  name: Unit;
+  password: string;
+}
+
+export interface SystemRoleCredential {
+  name: string; // Should correspond to UserRole values like 'Finanzas', 'Gerencia'
+  password: string;
+}
+
 export interface FinancialMovement {
   id: string;
   subOrderId?: string; // Can be linked to a sub-order

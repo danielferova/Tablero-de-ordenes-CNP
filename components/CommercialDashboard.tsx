@@ -361,7 +361,8 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
             acc[item.orderId].subOrders.push(item as SubOrder);
             return acc;
         }, {});
-        const ordersToPrint = Object.values(groupedData).sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
+        // FIX: Explicitly type `a` and `b` as `Object.values` may return `unknown[]`.
+        const ordersToPrint = Object.values(groupedData).sort((a: Order, b: Order) => a.orderNumber.localeCompare(b.orderNumber));
         
         const tableHeaders = ["No. Orden", "Cliente", "Fecha", "M. Cotizado", "M. Trabajos", "M. Facturado", "Saldo", "Estado"];
         const columnWidths = [20, 38, 20, 20, 20, 20, 20, 20]; // Adjusted widths
@@ -390,14 +391,16 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
         if (ordersToPrint.length === 0) {
              doc.text("No se encontraron órdenes con los filtros aplicados.", 105, y + 10, { align: 'center' });
         } else {
-             ordersToPrint.forEach(order => {
+            // FIX: Explicitly type `order` as `Object.values` may return `unknown[]`.
+             ordersToPrint.forEach((order: Order & { subOrders: SubOrder[] }) => {
                 if (y + rowHeight > pageHeight - bottomMargin) {
                     doc.addPage();
                     y = 15;
                     drawTableHeader();
                 }
                 
-                const subOrdersTotal = order.subOrders.reduce((sum, so) => sum + (so.amount || 0), 0);
+                // FIX: Explicitly type `reduce` parameters.
+                const subOrdersTotal = order.subOrders.reduce((sum: number, so: SubOrder) => sum + (so.amount || 0), 0);
                 const balance = (order.invoiceTotalAmount || 0) - (order.paidAmount || 0);
                 const allCobrado = order.subOrders.length > 0 && order.subOrders.every(so => so.status === OrderStatus.Cobrado);
                 const allPendiente = order.subOrders.every(so => so.status === OrderStatus.Pendiente);

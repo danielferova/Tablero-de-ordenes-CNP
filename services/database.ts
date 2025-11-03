@@ -1,4 +1,4 @@
-import { Order, SubOrder, Unit, PaymentMethod, OrderStatus, FinancialMovement, Director } from '../types';
+import { Order, SubOrder, Unit, PaymentMethod, OrderStatus, FinancialMovement, Director, UnitCredential, SystemRoleCredential, UserRole } from '../types';
 import { initializeApp } from 'firebase/app';
 import {
     getFirestore,
@@ -37,6 +37,7 @@ const clientsCollection = collection(db, 'clients');
 const directorsCollection = collection(db, 'directors');
 const executivesCollection = collection(db, 'executives');
 const unitsCollection = collection(db, 'units');
+const systemRolesCollection = collection(db, 'system_roles');
 
 
 // --- Real-time Data Listeners ---
@@ -175,7 +176,7 @@ export function listenToDirectors(callback: (directors: Director[]) => void) {
     return unsubscribe;
 }
 
-export function listenToUnits(callback: (units: { name: Unit, password: string }[]) => void) {
+export function listenToUnits(callback: (units: UnitCredential[]) => void) {
     const unsubscribe = onSnapshot(unitsCollection, (snapshot) => {
         const unitCredentials = snapshot.docs.map(doc => {
             const data = doc.data();
@@ -187,6 +188,22 @@ export function listenToUnits(callback: (units: { name: Unit, password: string }
         callback(unitCredentials);
     }, (error) => {
         console.error("Error listening to units collection: ", error);
+    });
+    return unsubscribe;
+}
+
+export function listenToSystemRoles(callback: (roles: SystemRoleCredential[]) => void) {
+    const unsubscribe = onSnapshot(systemRolesCollection, (snapshot) => {
+        const roles = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                name: data.name as string,
+                password: data.password as string,
+            };
+        });
+        callback(roles);
+    }, (error) => {
+        console.error("Error listening to system_roles collection: ", error);
     });
     return unsubscribe;
 }
@@ -458,6 +475,53 @@ async function seedUnits() {
     }
 }
 
+async function seedSystemRoles() {
+    const rolesToSeed = [
+        { name: UserRole.Finanzas, password: "finanzas123" },
+        { name: UserRole.Gerencia, password: "gerencia123" }
+    ];
+
+    const snapshot = await getDocs(systemRolesCollection);
+
+    if (snapshot.empty) {
+        console.log("System Roles collection is empty. Seeding initial roles...");
+        const batch = writeBatch(db);
+        rolesToSeed.forEach(role => {
+            const docRef = doc(systemRolesCollection);
+            batch.set(docRef, role);
+        });
+        await batch.commit();
+        console.log("System roles seeded successfully.");
+    } else {
+        const batch = writeBatch(db);
+        let updatesMade = false;
+        const existingRoles = new Map<string, any>();
+        snapshot.docs.forEach(doc => {
+            existingRoles.set(doc.data().name, doc.data());
+        });
+
+        rolesToSeed.forEach(seedRole => {
+            const existing = existingRoles.get(seedRole.name);
+            if (!existing) {
+                console.log(`Creating missing system role: ${seedRole.name}`);
+                const docRef = doc(systemRolesCollection);
+                batch.set(docRef, seedRole);
+                updatesMade = true;
+            } else if (!existing.password) {
+                console.log(`Updating system role with missing password: ${seedRole.name}`);
+                const docRef = doc(db, 'system_roles', snapshot.docs.find(d => d.data().name === seedRole.name)!.id);
+                batch.update(docRef, { password: seedRole.password });
+                updatesMade = true;
+            }
+        });
+
+        if (updatesMade) {
+            await batch.commit();
+            console.log("System role data updated successfully.");
+        }
+    }
+}
+
 const seedClients = () => seedCollectionIfEmpty(clientsCollection, 'Clients', [
     "& CAFÉ", "12+12", "ABBOT", "Acces Media", "ACREDICOM", "ADICLA", "AG Automotriz", "Agencias Way", "AHORRENT", "AIWA", "Akí", "Al Cilantro", "Aldo Nero", "Alexis Bargeles / Restaurante El Marinero.", "ALMACENES JAPON", "Aloe Vera", "Ambev", "Ambrella", "Amigo Presta", "Amore", "Andrea Arroyave / El Zeppelin", "Andrea Ríos / La Butik clothe & more", "Anfora", "ANIMOTION", "Antillon", "APROFAM", "Aracely Ajanel/ Ceramica Castelli.", "AUTO FIX PANTALLAS LED", "AUTOMOTRIS XELA PANTALLAS LED", "Azote BG", "BAC", "Banco Azteca", "Banco Cuscatlan", "Banco de Antigua", "Banco GYT Continental", "Banco Industrial", "Banrural", "Bantrab", "BAYER", "Bectris", "BMP AUTO PARTES PANTALLAS LED", "BMW", "Bounty Hunter", "Brander´s", "Busch Light", "Calera San Miguel", "Camara de Comercio", "Camara de Construcción", "Camas Fontex", "Campero", "Cantonesa", "Carlos Ruedas/ Serteco & Villas el Nido", "Carnaval", "Carolina Ríos/ Gobernación Departamental Quetgo.", "Casa del Ron", "Casa instrumental", "Casa Solar", "Cecodent", "CEI", "Cemaco", "Cementos Progreso", "CEMGUA", "Central de Medios", "Centro comercial Los Altos de Totonicapan", "Centro comercial Los Celajes", "CENTRO DENTAL TOOTH", "Centro Dermatológico de Occidente (CDO)", "Centro Odontológico Joy Dental", "Ceramipisos", "Cerveceria nacional", "Changan", "Chery", "Chicote", "Chiva Prenda", "CHN", "Claro", "COCA COLA", "Colegio Claremont", "Colegio El Pilar", "Colegio Inevoc", "Colegio La Patria", "Colegio Maria Auxiliadora", "Colegio Monte Verde", "Colegio Pino Montano", "Colegio Q'anill", "Colegio Salamanca", "Colua", "CONTINENTAL MOTORS", "Controlingooh", "Cool", "COOPERATIVA 31 DE JULIO", "Cooperativa Coopach", "COOPERATIVA COPELIBER R.L PANTALLASS LED", "COOPERATIVA CRECECOPE PANTALLAS LDE", "Cooperativa Ecosaba", "COPECHAPIN R.L RRSS", "COPEOORO", "Copeoro RL", "Coralsa", "Corium", "CORPORACIÓN AVANZA", "COSAMI ES MI COPE / CAMIONES VALLA / PANTALALS LED", "Creatbot", "CREDICHAPIN", "CREDIGUATE", "CREDIMARQ", "Credimás", "CREDIMAS + ESPERANZA RRSS / PANTALLAS LED", "CRUZ VERDE", "Cubata", "CUIK", "Curacao", "d4 McCann", "Daniel Quijivix / Laboratorio Inmunotest", "D'Antoni", "De La Granja", "Del Frutal", "Del Monte", "Delicia", "DISMACO DISTRIBUIDORA PANTALLAS LED", "DM OCCIDENTE PANTALLAS LED", "DOMINOS EXPRESS", "DOMINOS PIZZA", "Don Franklin", "Doña Ody", "DPCrea", "Dra Glendy Sum", "Ducal", "DUNKIN´DUNUTS", "Dynant", "Eagle Media", "Eco Resort Samalá", "Ecofiltro", "Econosuper", "El Arenal", "EL CAFETALITO", "El Gallo Mas Gallo", "Elecktra", "Electroma", "Emilio López/ Buckle", "EMISORAS UNIDAS", "Emporium", "Energuate", "Enrique Cay / Estudio de Arte Cay", "EPA", "Esto es Marte", "Etrog", "FABRICA DECORA XELA PANTALLAS LED", "FARMA COSTO", "FARMACIAS BATRES", "Feat", "FERCO", "Fernando de León/ Taller C&V", "FETICHE PRADERA XELA PANTALLAS LED", "FFACSA", "Ficohsa", "Filemón", "Finca La Azotea", "Finca la soledad/ Jimena Fuentes", "Foremost", "FREEDOM", "Friapp", "Fritolay", "Fulano Sutano", "Fundea", "G&T", "Gabriela Camas/ Neurodiagnostico", "Gallo", "Gamma", "Genesis empresarial", "Good Modd", "Granjero", "Grapete", "Grupo Construferro", "Grupo MeMe", "GRUPO MASTER", "Grupo Onyx", "Grupo Q", "H. Alvarez", "Havas", "Hospital totonicapan", "HOTEL LOS ARCOS PANTALLAS LED / RRSS", "House Dentsu", "HS Centro", "Hyundai", "Idealsa", "Ina", "Intecap", "INTERCOP", "Irtra", "Issima", "J. Gutierrez / Motos Haohue", "Jairo Daniel/ App Ziengo", "Jessica Castillo/ Gerente Comercial Cayala.", "JIM", "JLMarketing", "Johana Calvillo / Salon de Belleza Acuarius.", "Kalea", "KAPITAL SOLUCIONES PANTALLAS LED", "KATO KI", "Kern´s", "Kid Planeta", "L´IMAGE INTERPLAZA PANTALLAS LED", "La Colonia", "LA CURACAO", "La Hacienda Del Chef", "La Luna", "La Sevillana", "La Torre", "LA TRONADORA", "Lafabrica&jotabequ", "Lala", "Lala Kids", "LATAM", "Le Bolsha", "Lecleire", "Leticia Rojas / Excel Automotriz FUSO", "LEVUNI", "LICORES DE GUATEMALA", "Little Caesar´s", "LOCOS DE ASAR", "LSUD", "Macdonals", "Maderas San Miguel", "Magic Touch", "Mansión Los Guichos", "Maravilla", "Marcela Girón/ Eventos HAMA", "Marinero", "MARIOT´S BOUTIQUE", "Marlon Rodriguez/ Gourmet", "Marsa", "Maty & Paul", "MAX", "Mayatour", "Mazda", "Mazola", "MCI", "Media Naranja", "Media Partners", "Medios&Mas", "MEGA BLOCK", "MEGA SHOES", "MEGATRONCH´S", "Mevecon", "Mi casita Montesori", "Miguel de León Regil / Hospital Veterinario Zoo Mascota", "Ministerio de Gobernación", "Modelo", "Molinos Modernos", "Mosca", "Mostro", "MOTOPLUS", "Motoresa", "MULTIMATERIALES PANTALLAS LED", "MUNICIPALIDAD DE LA ESPERANZA", "Muriel Feterman/ Muriel Postres", "NESCAFE", "Nestle", "Norcom", "Nube Blanca", "Nueva Esperanza", "Nutry Lety", "Ogilvy", "OMD", "OPTICA LOURDES PANTALLAS LED", "Optical Center", "Osberto Aguilar/ Laboratorio Aguilar", "Pablo Galicia/ Colegio Salamanca", "Palm Era", "Panamericana", "Papa John's", "PAPELERA INTERNACIONAL", "PATSY RESTAURANTE", "Pedidos ya", "Pepsi", "Peter Jordan", "PeYa", "PHARA", "PHD", "PICACIA", "PICADILY PANTALLAS LED", "PICK A POKE XELA", "Pieles y Napas de Occidente", "PINTER PANTALLAS", "Pizza Hut", "PLAZA 7 RRSS", "Pollolandia", "PRADERA XELA PANRTALLAS LED", "Pricesmart", "Progreso", "Promerica", "Publicidad Comercial", "Publinac", "Puma", "Quinta de las flores", "Raptor", "Red Azul", "Repuestos alvarez", "Restaurante Don Andres", "RESTAURANTE EL POTRERO RRSS / PANTALLAS LED", "Revive", "Rodrigo Echeverria/ Monster", "Roobik", "ROSAL", "Rufo", "Saatchi", "Salamanca", "Salvavidas", "SANITISU", "SANTA CRUZ R.L", "Santa Delfina", "Saúl", "Schell", "SCOTT PAPEL PANTALLAS LED", "Sears", "Seguros Universales", "Senator", "Señorial", "SERVI", "Sherwin williams", "Siboney", "Siciliana", "Sinergia", "SISA Seguros de Guatemala", "SISTEGUA", "Sitesa", "Smartfit", "SOLAR CITY", "Starcom", "Stephany Licardié (Mediadora)", "Sublime", "Suma", "Super del Barrio", "TACOS EL PORTON PANTALLAS LED", "Tacticas", "Talishte", "Tampico", "Tatiana Camposeco/ Psicoclínica", "TAYTEC RRSS", "TBWA RIOT", "Te del Monte", "Teatro THRIAMBOS", "Tecnofácil", "Texaco", "TEXACO- GRUPO PERZA", "Tiendas El Tejar", "Tigo", "Tiky", "TMU ROPA PANTALLAS LED", "Top Publicidad", "TORETES RESTAURANTES LED", "TRE FRATELLI", "Tropigas", "TV AZTECA", "TVS", "UDEO", "ULTRACEM", "UMG", "Unicomer", "UNIMARCKS S.A XELA PANTALLAS LED", "Union Export", "UNIPHARM", "UNIVERSIDAD DA VINCI", "UNIVERSIDAD DEL VALLE", "UNIVERSIDAD GALILEO", "UNIVERSIDAD MESOAMERICANA", "UNO", "UPA", "Vana", "Venite", "Venza", "VESUVIO", "Villeda", "WASH & DRIVE PANTALLAS LED", "WCA", "Wendy´s", "YA ESTA", "YAMAHA MOTOS", "Yoko", "Zixx"
 ]);
@@ -570,3 +634,4 @@ seedClients();
 seedDirectors();
 seedExecutives();
 seedUnits();
+seedSystemRoles();

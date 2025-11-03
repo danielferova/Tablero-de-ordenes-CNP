@@ -59,7 +59,9 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters, is
         };
     }, []);
 
-    const isFilterDisabled = isUnitDirector || isCommercialDirector;
+    const isUnitFilterDisabled = isUnitDirector || isCommercialDirector;
+    const isDirectorFilterDisabled = isCommercialDirector;
+    const isExecutiveFilterDisabled = isCommercialDirector;
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 border-b border-gray-200 dark:border-gray-700">
@@ -92,8 +94,8 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters, is
                 value={filters.director}
                 onChange={handleInputChange}
                 className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:bg-gray-200 dark:disabled:bg-gray-700/50 disabled:cursor-not-allowed"
-                disabled={isFilterDisabled}
-                title={isFilterDisabled ? "El filtro de director no está disponible en esta vista." : "Filtrar por director"}
+                disabled={isDirectorFilterDisabled}
+                title={isDirectorFilterDisabled ? "El filtro de director no está disponible en esta vista." : "Filtrar por director"}
             >
                 <option value="all">Todos los Directores</option>
                 {directors.map(director => <option key={director} value={director}>{director}</option>)}
@@ -103,8 +105,8 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters, is
                 value={filters.executive}
                 onChange={handleInputChange}
                 className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:bg-gray-200 dark:disabled:bg-gray-700/50 disabled:cursor-not-allowed"
-                disabled={isFilterDisabled}
-                title={isFilterDisabled ? "El filtro de ejecutivo no está disponible en esta vista." : "Filtrar por ejecutivo"}
+                disabled={isExecutiveFilterDisabled}
+                title={isExecutiveFilterDisabled ? "El filtro de ejecutivo no está disponible en esta vista." : "Filtrar por ejecutivo"}
             >
                 <option value="all">Todos los Ejecutivos</option>
                 {executives.map(executive => <option key={executive} value={executive}>{executive}</option>)}
@@ -114,8 +116,8 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters, is
                     type="button"
                     onClick={() => setUnitDropdownOpen(prev => !prev)}
                     className="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-left flex justify-between items-center disabled:bg-gray-200 dark:disabled:bg-gray-700/50 disabled:cursor-not-allowed"
-                    disabled={isFilterDisabled}
-                    title={isFilterDisabled ? "El filtro de unidad no está disponible en esta vista." : "Filtrar por unidad"}
+                    disabled={isUnitFilterDisabled}
+                    title={isUnitFilterDisabled ? "El filtro de unidad no está disponible en esta vista." : "Filtrar por unidad"}
                 >
                     <span className="truncate">
                         {filters.unit.length === 0 ? 'Todas las Unidades' : 
@@ -124,7 +126,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters, is
                     </span>
                     <ChevronDownIcon className={`w-5 h-5 transition-transform ${isUnitDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {isUnitDropdownOpen && !isFilterDisabled && (
+                {isUnitDropdownOpen && !isUnitFilterDisabled && (
                     <div className="absolute z-20 w-72 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
                         <div className="p-2 flex justify-between border-b border-gray-200 dark:border-gray-700">
                             <button onClick={handleSelectAllUnits} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Todas</button>

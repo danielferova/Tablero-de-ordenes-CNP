@@ -98,9 +98,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
             if (startDate && itemDate < startDate) return false;
             if (endDate && itemDate > endDate) return false;
 
-            // The unit, director, and executive dropdown filters are disabled for role-specific views.
+            // Apply filters based on user role.
             if (currentUserRole === UserRole.Finanzas || currentUserRole === UserRole.Gerencia) {
                 if (filters.unit.length > 0 && !filters.unit.includes(item.unit as Unit)) return false;
+                if (filters.director !== 'all' && item.director !== filters.director) return false;
+                if (filters.executive !== 'all' && item.executive !== filters.executive) return false;
+            } else if (currentUserRole === UserRole.Unidad) {
+                // For Unit Directors, only apply director and executive filters. Unit filter is implicitly handled.
                 if (filters.director !== 'all' && item.director !== filters.director) return false;
                 if (filters.executive !== 'all' && item.executive !== filters.executive) return false;
             }

@@ -49,14 +49,24 @@ export interface SystemRoleCredential {
 
 export interface FinancialMovement {
   id: string;
-  subOrderId?: string; // Can be linked to a sub-order
-  orderId?: string; // Or directly to an order
+  subOrderId?: string;
+  orderId?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
   invoiceAmount?: number;
   paymentDate?: string;
   paidAmount?: number;
   creationDate: string;
+  // New fields for XML data persistence
+  issuerName?: string;
+  issuerNit?: string;
+  receiverName?: string;
+  receiverNit?: string;
+  issueDateTime?: string; // Full ISO date-time string from XML
+  authorizationUuid?: string;
+  series?: string;
+  dteNumber?: string;
+  vatWithholdingAgent?: string;
 }
 
 export interface SubOrder {

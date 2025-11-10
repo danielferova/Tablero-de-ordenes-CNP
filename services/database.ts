@@ -123,6 +123,16 @@ export function listenToData(callback: (data: { orders: Order[], subOrders: SubO
                 paymentDate: data.paymentDate || null,
                 paidAmount: data.paidAmount ?? null,
                 creationDate: data.creationDate,
+                // Read new XML fields
+                issuerName: data.issuerName || null,
+                issuerNit: data.issuerNit || null,
+                receiverName: data.receiverName || null,
+                receiverNit: data.receiverNit || null,
+                issueDateTime: data.issueDateTime || null,
+                authorizationUuid: data.authorizationUuid || null,
+                series: data.series || null,
+                dteNumber: data.dteNumber || null,
+                vatWithholdingAgent: data.vatWithholdingAgent || null,
             } as FinancialMovement;
         });
         movementsLoaded = true;
@@ -257,8 +267,8 @@ export async function createOrder(
             workType: orderData.workType,
             description: orderData.description,
             creationDate: currentDate,
-            amount: assignment.amount, // Assign amount if provided
-            budgetedAmount: assignment.amount, // Also save it as the initial budget
+            amount: assignment.amount ?? null, // Assign amount if provided, otherwise null
+            budgetedAmount: assignment.amount ?? null, // Also save it as the initial budget
         };
         const subOrderDocRef = doc(subOrdersCollection);
         batch.set(subOrderDocRef, subOrderData);
@@ -331,9 +341,6 @@ export async function updateOrderFinances(
 
     movementsToUpdate.forEach(movement => {
         const movementDocRef = doc(db, 'financialMovements', movement.id);
-        // FIX: Create a clean data object to prevent circular reference errors.
-        // Instead of spreading the potentially complex 'movement' object, we explicitly
-        // map only the properties defined in the FinancialMovement interface.
         const cleanMovementData = {
             subOrderId: movement.subOrderId,
             orderId: movement.orderId,
@@ -343,6 +350,16 @@ export async function updateOrderFinances(
             paymentDate: movement.paymentDate,
             paidAmount: movement.paidAmount,
             creationDate: movement.creationDate,
+            // Add new XML fields for persistence
+            issuerName: movement.issuerName,
+            issuerNit: movement.issuerNit,
+            receiverName: movement.receiverName,
+            receiverNit: movement.receiverNit,
+            issueDateTime: movement.issueDateTime,
+            authorizationUuid: movement.authorizationUuid,
+            series: movement.series,
+            dteNumber: movement.dteNumber,
+            vatWithholdingAgent: movement.vatWithholdingAgent,
         };
         batch.update(movementDocRef, cleanMovementData);
     });

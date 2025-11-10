@@ -68,6 +68,15 @@ const cleanFinancialMovement = (fm: FinancialMovement): FinancialMovement => ({
     paymentDate: fm.paymentDate,
     paidAmount: fm.paidAmount,
     creationDate: fm.creationDate,
+    issuerName: fm.issuerName,
+    issuerNit: fm.issuerNit,
+    receiverName: fm.receiverName,
+    receiverNit: fm.receiverNit,
+    issueDateTime: fm.issueDateTime,
+    authorizationUuid: fm.authorizationUuid,
+    series: fm.series,
+    dteNumber: fm.dteNumber,
+    vatWithholdingAgent: fm.vatWithholdingAgent,
 });
 
 interface FullOrderData extends Order, SubOrder {}
@@ -351,7 +360,16 @@ const App: React.FC = () => {
                     original.invoiceDate !== fm.invoiceDate ||
                     original.invoiceAmount !== fm.invoiceAmount ||
                     original.paymentDate !== fm.paymentDate ||
-                    original.paidAmount !== fm.paidAmount
+                    original.paidAmount !== fm.paidAmount ||
+                    original.issuerName !== fm.issuerName ||
+                    original.issuerNit !== fm.issuerNit ||
+                    original.receiverName !== fm.receiverName ||
+                    original.receiverNit !== fm.receiverNit ||
+                    original.issueDateTime !== fm.issueDateTime ||
+                    original.authorizationUuid !== fm.authorizationUuid ||
+                    original.series !== fm.series ||
+                    original.dteNumber !== fm.dteNumber ||
+                    original.vatWithholdingAgent !== fm.vatWithholdingAgent
                 );
             });
             const movementsToDelete = originalMovements.filter(om => !finalMovements.some(fm => fm.id === om.id));

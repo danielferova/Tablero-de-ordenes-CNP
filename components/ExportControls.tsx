@@ -500,6 +500,15 @@ const ExportControls: React.FC<ExportControlsProps> = ({
             'Fecha Pago': fm.paymentDate,
             'Monto Pagado': fm.paidAmount,
             'Fecha Creación Mov.': fm.creationDate,
+            'Emisor Nombre': fm.issuerName,
+            'Emisor NIT': fm.issuerNit,
+            'Receptor Nombre': fm.receiverName,
+            'Receptor NIT': fm.receiverNit,
+            'Fecha Hora Emisión XML': fm.issueDateTime,
+            'UUID Autorización': fm.authorizationUuid,
+            'Serie DTE': fm.series,
+            'Número DTE': fm.dteNumber,
+            'Agente Retención IVA': fm.vatWithholdingAgent,
         }));
         const financialMovementsSheet = XLSX.utils.json_to_sheet(financialMovementsData);
         XLSX.utils.book_append_sheet(workbook, financialMovementsSheet, 'Movimientos Financieros');
@@ -522,57 +531,10 @@ const ExportControls: React.FC<ExportControlsProps> = ({
     };
 
     const handleBackupDownload = () => {
-        // Sanitize data before stringifying to prevent circular reference errors.
-        // This creates plain JavaScript objects with only the expected properties.
-        const cleanOrders = allOrders.map(o => ({
-            id: o.id,
-            orderNumber: o.orderNumber,
-            client: o.client,
-            description: o.description,
-            workType: o.workType,
-            creationDate: o.creationDate,
-            quotedAmount: o.quotedAmount,
-            invoiceNumber: o.invoiceNumber,
-            invoiceDate: o.invoiceDate,
-            paymentDate: o.paymentDate,
-            paymentMethod: o.paymentMethod,
-            invoiceTotalAmount: o.invoiceTotalAmount,
-            paidAmount: o.paidAmount,
-            executive: o.executive,
-            director: o.director,
-            billingType: o.billingType,
-            financialObservations: o.financialObservations,
-        }));
-
-        const cleanSubOrders = allSubOrders.map(so => ({
-            id: so.id,
-            orderId: so.orderId,
-            subOrderNumber: so.subOrderNumber,
-            unit: so.unit,
-            workType: so.workType,
-            description: so.description,
-            amount: so.amount,
-            observations: so.observations,
-            status: so.status,
-            creationDate: so.creationDate,
-        }));
-
-        const cleanFinancialMovements = allFinancialMovements.map(fm => ({
-            id: fm.id,
-            subOrderId: fm.subOrderId,
-            orderId: fm.orderId,
-            invoiceNumber: fm.invoiceNumber,
-            invoiceDate: fm.invoiceDate,
-            invoiceAmount: fm.invoiceAmount,
-            paymentDate: fm.paymentDate,
-            paidAmount: fm.paidAmount,
-            creationDate: fm.creationDate,
-        }));
-
         const backupData = {
-            orders: cleanOrders,
-            subOrders: cleanSubOrders,
-            financialMovements: cleanFinancialMovements,
+            orders: allOrders,
+            subOrders: allSubOrders,
+            financialMovements: allFinancialMovements,
             clients: allClients,
             directors: allDirectors,
             executives: allExecutives,

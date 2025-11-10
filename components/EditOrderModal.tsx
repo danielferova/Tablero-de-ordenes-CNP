@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Order, SubOrder, FinancialMovement } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { PencilIcon } from './icons/PencilIcon';
 import { WarningIcon } from './icons/WarningIcon';
 import { DocumentIcon } from './icons/DocumentIcon';
-import { BriefcaseIcon } from './icons/BriefcaseIcon';
+import { UploadIcon } from './icons/UploadIcon';
+import InvoiceDetailModal from './InvoiceDetailModal';
 
 interface EditOrderModalProps {
     order: Order;
@@ -109,24 +110,19 @@ const AmountStatusCard: React.FC<{
 
 const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, financialMovements, onClose, onSubmit }) => {
     const getInitialBillingType = () => {
-        // If billingType is explicitly set, it's the source of truth.
         if (order.billingType) {
             return order.billingType;
         }
-        // If not set, try to infer from existing financial movements to handle legacy data.
         if (financialMovements && financialMovements.length > 0) {
-            // If any movement is tied to a specific sub-task, it's per-task billing.
             const hasPerTaskMovements = financialMovements.some(m => m.subOrderId);
             if (hasPerTaskMovements) {
                 return 'perTask';
             }
-            // If any movement is tied to the order globally, it's global billing.
             const hasGlobalMovements = financialMovements.some(m => m.orderId && !m.subOrderId);
             if (hasGlobalMovements) {
                 return 'global';
             }
         }
-        // Default to null if no type is set and no movements exist, prompting user selection.
         return null;
     };
     
@@ -134,14 +130,11 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
     const [activeForm, setActiveForm] = useState<{ type: 'add' | 'edit'; subOrderId?: string; orderId?: string; movementId?: string } | null>(null);
     const [billingType, setBillingType] = useState<BillingType | null>(getInitialBillingType());
     const [financialObservations, setFinancialObservations] = useState(order.financialObservations || '');
-    
-    // Make the billing mode selection permanent if a type is already saved OR if there are existing financial movements.
+    const [viewingMovement, setViewingMovement] = useState<FinancialMovement | null>(null);
+
     const isModePermanent = !!order.billingType || (financialMovements && financialMovements.length > 0);
 
     useEffect(() => {
-        // FIX: Replaced unsafe deep copy (JSON.stringify) with a safe, explicit property mapping.
-        // This prevents "circular structure" errors by creating plain JavaScript objects
-        // from the complex Firestore objects passed in props.
         const clonedMovements = financialMovements.map(m => ({
             id: m.id,
             subOrderId: m.subOrderId,
@@ -151,7 +144,16 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
             invoiceAmount: m.invoiceAmount,
             paymentDate: m.paymentDate,
             paidAmount: m.paidAmount,
-            creationDate: m.creationDate
+            creationDate: m.creationDate,
+            issuerName: m.issuerName,
+            issuerNit: m.issuerNit,
+            receiverName: m.receiverName,
+            receiverNit: m.receiverNit,
+            issueDateTime: m.issueDateTime,
+            authorizationUuid: m.authorizationUuid,
+            series: m.series,
+            dteNumber: m.dteNumber,
+            vatWithholdingAgent: m.vatWithholdingAgent,
         }));
         setLocalMovements(clonedMovements);
     }, [financialMovements]);
@@ -167,16 +169,22 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
     };
     
     const handleSaveMovement = (movement: FinancialMovement) => {
+        const sanitizedMovement: FinancialMovement = {
+            ...movement,
+            invoiceAmount: movement.invoiceAmount === null || isNaN(Number(movement.invoiceAmount)) ? undefined : Number(movement.invoiceAmount),
+            paidAmount: movement.paidAmount === null || isNaN(Number(movement.paidAmount)) ? undefined : Number(movement.paidAmount),
+        };
+
         if (activeForm?.type === 'add') {
             const newMovement: FinancialMovement = {
-                ...movement,
+                ...sanitizedMovement,
                 id: `local-${Date.now()}`,
                 creationDate: new Date().toISOString().split('T')[0],
             };
             setLocalMovements(prev => [...prev, newMovement]);
         } else if (activeForm?.type === 'edit') {
             setLocalMovements(prev => 
-                prev.map(m => (m.id === movement.id ? movement : m))
+                prev.map(m => (m.id === sanitizedMovement.id ? sanitizedMovement : m))
             );
         }
         setActiveForm(null);
@@ -207,10 +215,6 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
             </div>
             {subOrders.map(so => {
                 const movementsForSubOrder = localMovements.filter(m => m.subOrderId === so.id);
-                const totalInvoiced = movementsForSubOrder.reduce((sum, m) => sum + (m.invoiceAmount || 0), 0);
-                const totalPaid = movementsForSubOrder.reduce((sum, m) => sum + (m.paidAmount || 0), 0);
-                const balance = (so.amount || 0) - totalPaid;
-
                 return (
                     <div key={so.id} className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700">
                         <div className="flex justify-between items-start mb-3">
@@ -251,6 +255,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
                             handleSaveMovement={handleSaveMovement}
                             handleDeleteMovement={handleDeleteMovement}
                             identifier={{ subOrderId: so.id }}
+                            onViewDetails={setViewingMovement}
                         />
                     </div>
                 );
@@ -273,9 +278,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
                     </div>
                     <button 
                         onClick={() => setActiveForm({ type: 'add', orderId: order.id })}
-                        className="flex items-center text-sm bg-brand-primary hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-md transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        disabled={globalMovements.length > 0}
-                        title={globalMovements.length > 0 ? "Solo se puede añadir una factura en modo Global." : "Añadir nuevo movimiento"}
+                        className="flex items-center text-sm bg-brand-primary hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-md transition-colors"
                     >
                         <PlusIcon className="w-4 h-4 mr-1.5" />
                         Añadir Movimiento
@@ -304,6 +307,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
                     handleSaveMovement={handleSaveMovement}
                     handleDeleteMovement={handleDeleteMovement}
                     identifier={{ orderId: order.id }}
+                    onViewDetails={setViewingMovement}
                 />
             </div>
         );
@@ -354,6 +358,9 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
                     <button type="button" onClick={onClose} className="py-2 px-4 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500">Cancelar</button>
                     <button type="button" onClick={handleSubmit} className="py-2 px-4 bg-brand-primary text-white rounded-md hover:bg-red-700">Guardar Cambios</button>
                 </footer>
+                 {viewingMovement && (
+                    <InvoiceDetailModal movement={viewingMovement} onClose={() => setViewingMovement(null)} />
+                )}
             </div>
         </div>
     );
@@ -366,9 +373,10 @@ interface MovementsTableProps {
     handleSaveMovement: (movement: FinancialMovement) => void;
     handleDeleteMovement: (id: string) => void;
     identifier: { subOrderId?: string; orderId?: string; };
+    onViewDetails: (movement: FinancialMovement) => void;
 }
 
-const MovementsTable: React.FC<MovementsTableProps> = ({ movements, activeForm, setActiveForm, handleSaveMovement, handleDeleteMovement, identifier }) => {
+const MovementsTable: React.FC<MovementsTableProps> = ({ movements, activeForm, setActiveForm, handleSaveMovement, handleDeleteMovement, identifier, onViewDetails }) => {
     if (movements.length === 0 && (!activeForm || activeForm.type !== 'add')) return <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">No hay movimientos registrados.</p>;
 
 
@@ -382,7 +390,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({ movements, activeForm, 
                         <th className="p-2">Monto Facturado</th>
                         <th className="p-2">Fecha Pago</th>
                         <th className="p-2">Monto Pagado</th>
-                        <th className="p-2"></th>
+                        <th className="p-2 text-right">Acciones</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
@@ -406,9 +414,14 @@ const MovementsTable: React.FC<MovementsTableProps> = ({ movements, activeForm, 
                                 <td className="p-2">{formatCurrency(mov.invoiceAmount)}</td>
                                 <td className="p-2">{mov.paymentDate || '-'}</td>
                                 <td className="p-2">{formatCurrency(mov.paidAmount)}</td>
-                                <td className="p-2 text-right">
-                                    <button onClick={() => setActiveForm({ type: 'edit', movementId: mov.id, ...identifier })} className="p-1 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"><PencilIcon className="w-4 h-4"/></button>
-                                    <button onClick={() => handleDeleteMovement(mov.id)} className="p-1 text-gray-500 hover:text-red-600 dark:hover:text-red-400"><TrashIcon className="w-4 h-4"/></button>
+                                <td className="p-2 text-right space-x-1">
+                                    <button onClick={() => setActiveForm({ type: 'edit', movementId: mov.id, ...identifier })} className="p-1 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600" title="Editar"><PencilIcon className="w-4 h-4"/></button>
+                                    {mov.authorizationUuid && (
+                                        <button onClick={() => onViewDetails(mov)} className="p-1 text-gray-500 hover:text-green-600 dark:hover:text-green-400 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600" title="Ver detalle de DTE">
+                                            <DocumentIcon className="w-4 h-4"/>
+                                        </button>
+                                    )}
+                                    <button onClick={() => handleDeleteMovement(mov.id)} className="p-1 text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600" title="Eliminar"><TrashIcon className="w-4 h-4"/></button>
                                 </td>
                             </tr>
                         )}
@@ -419,6 +432,21 @@ const MovementsTable: React.FC<MovementsTableProps> = ({ movements, activeForm, 
         </div>
     );
 };
+
+interface XmlInvoiceData {
+    issuerName: string;
+    issuerNit: string;
+    receiverName: string;
+    receiverNit: string;
+    series: string;
+    dteNumber: string;
+    issueDateTime: string | null;
+    authorizationUuid: string;
+    vatWithholdingAgent: string;
+    displayIssuer: string;
+    displayReceiver: string;
+    displayIssueDateTime: string;
+}
 
 interface MovementFormProps {
     identifier: { subOrderId?: string; orderId?: string; };
@@ -435,8 +463,101 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
         paymentDate: '',
         paidAmount: '',
     });
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [xmlData, setXmlData] = useState<XmlInvoiceData | null>(null);
+
+
+    const handleXmlUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        if (file.type !== 'text/xml' && !file.name.endsWith('.xml')) {
+            alert('Por favor, seleccione un archivo XML válido.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const xmlString = e.target?.result as string;
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlString, "application/xml");
+
+                const errorNode = xmlDoc.querySelector("parsererror");
+                if (errorNode) {
+                    throw new Error("Error al procesar el archivo XML.");
+                }
+                
+                const emisorNode = xmlDoc.getElementsByTagName("dte:Emisor")[0];
+                const receptorNode = xmlDoc.getElementsByTagName("dte:Receptor")[0];
+                const datosGenerales = xmlDoc.getElementsByTagName("dte:DatosGenerales")[0];
+                const granTotalNode = xmlDoc.getElementsByTagName("dte:GranTotal")[0];
+                const numeroAutorizacionNode = xmlDoc.getElementsByTagName("dte:NumeroAutorizacion")[0];
+
+                if (!emisorNode || !receptorNode || !datosGenerales || !granTotalNode || !numeroAutorizacionNode) {
+                    throw new Error("El archivo XML no tiene el formato esperado. Faltan etiquetas DTE requeridas (Emisor, Receptor, DatosGenerales, GranTotal, NumeroAutorizacion).");
+                }
+                
+                const issueDateTime = datosGenerales.getAttribute("FechaHoraEmision");
+                const invoiceDate = issueDateTime ? issueDateTime.split('T')[0] : '';
+                const invoiceAmount = granTotalNode.textContent || '';
+                const series = numeroAutorizacionNode.getAttribute("Serie");
+                const dteNumber = numeroAutorizacionNode.getAttribute("Numero");
+                const invoiceNumber = (series && dteNumber) ? `${series}-${dteNumber}` : '';
+                
+                setFormData(prev => ({
+                    ...prev,
+                    invoiceNumber: invoiceNumber,
+                    invoiceDate: invoiceDate,
+                    invoiceAmount: invoiceAmount,
+                }));
+                
+                const issuerName = emisorNode.getAttribute("NombreEmisor") || 'No encontrado';
+                const issuerNit = emisorNode.getAttribute("NITEmisor") || 'No encontrado';
+                const receiverName = receptorNode?.getAttribute("NombreReceptor") || 'No encontrado';
+                const receiverNit = receptorNode?.getAttribute("IDReceptor") || 'No encontrado';
+                const formattedIssueDateTime = issueDateTime ? new Date(issueDateTime).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' }) : 'No encontrada';
+                const authorizationUuid = numeroAutorizacionNode?.textContent || 'No encontrada';
+                const afiliacionIVA = emisorNode?.getAttribute("AfiliacionIVA");
+                
+                let agenteRetencion = 'Información no disponible';
+                if (afiliacionIVA === 'GEN') agenteRetencion = 'No es agente de retención.';
+                else if (afiliacionIVA === 'PEQ') agenteRetencion = 'Pequeño Contribuyente';
+                else if (afiliacionIVA === 'EXE') agenteRetencion = 'Exento';
+
+
+                setXmlData({
+                    issuerName,
+                    issuerNit,
+                    receiverName,
+                    receiverNit,
+                    series: series || 'No encontrado',
+                    dteNumber: dteNumber || 'No encontrado',
+                    issueDateTime,
+                    authorizationUuid,
+                    vatWithholdingAgent: agenteRetencion,
+                    displayIssuer: `${issuerNit} - ${issuerName}`,
+                    displayReceiver: `${receiverNit} - ${receiverName}`,
+                    displayIssueDateTime: formattedIssueDateTime,
+                });
+                
+            } catch (error) {
+                console.error("XML Parsing Error:", error);
+                alert(error instanceof Error ? error.message : 'Ocurrió un error al leer el archivo XML.');
+            } finally {
+                if(fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                }
+            }
+        };
+        reader.readAsText(file);
+    };
+
 
     useEffect(() => {
+        setXmlData(null); 
         if (movement) {
             setFormData({
                 invoiceNumber: movement.invoiceNumber || '',
@@ -446,7 +567,6 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
                 paidAmount: movement.paidAmount?.toString() ?? '',
             });
         } else {
-            // Reset for 'add' form
             setFormData({
                 invoiceNumber: '',
                 invoiceDate: '',
@@ -468,32 +588,87 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
         const parsedInvoiceAmount = formData.invoiceAmount ? parseFloat(String(formData.invoiceAmount)) : NaN;
         const parsedPaidAmount = formData.paidAmount ? parseFloat(String(formData.paidAmount)) : NaN;
 
-        // Construct the payload, preserving existing properties during an edit.
-        // Use `null` for empty fields, as Firestore handles `null` for clearing fields, but ignores `undefined`.
         const payload = {
             ...(movement as FinancialMovement),
             ...identifier,
-            invoiceNumber: formData.invoiceNumber || null,
-            invoiceDate: formData.invoiceDate || null,
-            invoiceAmount: !isNaN(parsedInvoiceAmount) ? parsedInvoiceAmount : null,
-            paymentDate: formData.paymentDate || null,
-            paidAmount: !isNaN(parsedPaidAmount) ? parsedPaidAmount : null,
+            invoiceNumber: formData.invoiceNumber || undefined,
+            invoiceDate: formData.invoiceDate || undefined,
+            invoiceAmount: !isNaN(parsedInvoiceAmount) ? parsedInvoiceAmount : undefined,
+            paymentDate: formData.paymentDate || undefined,
+            paidAmount: !isNaN(parsedPaidAmount) ? parsedPaidAmount : undefined,
+            ...(xmlData && {
+                issuerName: xmlData.issuerName,
+                issuerNit: xmlData.issuerNit,
+                receiverName: xmlData.receiverName,
+                receiverNit: xmlData.receiverNit,
+                issueDateTime: xmlData.issueDateTime,
+                authorizationUuid: xmlData.authorizationUuid,
+                series: xmlData.series,
+                dteNumber: xmlData.dteNumber,
+                vatWithholdingAgent: xmlData.vatWithholdingAgent,
+            })
         };
 
         onSave(payload as FinancialMovement);
     }
 
     const inputClasses = "w-full p-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary";
+    
+    const renderInfoRow = (label: string, value: string | null | undefined, options: { mono?: boolean, truncate?: boolean, break?: boolean } = {}) => (
+        <>
+            <div className="p-2 bg-teal-600 text-white font-semibold text-sm border-t border-teal-700">{label}</div>
+            <div className={`p-2 text-sm text-gray-800 dark:text-gray-200 border-t border-gray-200 dark:border-gray-700 ${options.mono ? 'font-mono text-xs' : ''} ${options.truncate ? 'truncate' : ''} ${options.break ? 'break-all' : ''}`} title={value || ''}>
+                {value || 'N/A'}
+            </div>
+        </>
+    );
 
     return (
         <form onSubmit={handleFormSubmit} className="p-3 my-2 bg-gray-100 dark:bg-gray-900/50 rounded-md border border-gray-300 dark:border-gray-600">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                <input type="text" name="invoiceNumber" value={formData.invoiceNumber} onChange={handleChange} placeholder="No. Factura" className={inputClasses} />
-                <input type="date" name="invoiceDate" value={formData.invoiceDate} onChange={handleChange} className={inputClasses} />
-                <input type="number" name="invoiceAmount" value={formData.invoiceAmount} onChange={handleChange} placeholder="Monto Factura" step="0.01" className={inputClasses} />
-                <input type="date" name="paymentDate" value={formData.paymentDate} onChange={handleChange} className={inputClasses} />
-                <input type="number" name="paidAmount" value={formData.paidAmount} onChange={handleChange} placeholder="Monto Pagado" step="0.01" className={inputClasses} />
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-x-3 gap-y-2 items-end">
+                <div className="md:col-span-2">
+                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">No. Factura</label>
+                    <div className="flex">
+                        <input type="text" name="invoiceNumber" value={formData.invoiceNumber} onChange={handleChange} placeholder="Serie-Número" className={`${inputClasses} rounded-r-none focus:z-10 relative`} />
+                        <input type="file" ref={fileInputRef} onChange={handleXmlUpload} accept="text/xml,.xml" className="hidden" />
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 border border-l-0 border-gray-300 dark:border-gray-500 rounded-r-md" title="Cargar desde XML">
+                           <UploadIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                        </button>
+                    </div>
+                </div>
+                <div>
+                     <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Fecha Factura</label>
+                    <input type="date" name="invoiceDate" value={formData.invoiceDate} onChange={handleChange} className={inputClasses} />
+                </div>
+                 <div>
+                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Monto Factura</label>
+                    <input type="number" name="invoiceAmount" value={formData.invoiceAmount} onChange={handleChange} placeholder="Monto" step="0.01" className={inputClasses} />
+                </div>
+                 <div>
+                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Fecha Pago</label>
+                    <input type="date" name="paymentDate" value={formData.paymentDate} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Monto Pagado</label>
+                    <input type="number" name="paidAmount" value={formData.paidAmount} onChange={handleChange} placeholder="Monto" step="0.01" className={inputClasses} />
+                </div>
             </div>
+            {xmlData && (
+                 <div className="mt-4 border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                    <h4 className="text-base font-semibold text-gray-800 dark:text-white p-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-300 dark:border-gray-600">
+                        Detalle del Documento
+                    </h4>
+                    <div className="grid grid-cols-[180px,1fr] bg-white dark:bg-gray-800">
+                       {renderInfoRow('Emisor:', xmlData.displayIssuer, { truncate: true })}
+                       {renderInfoRow('Receptor:', xmlData.displayReceiver, { truncate: true })}
+                       {renderInfoRow('Fecha Emisión:', xmlData.displayIssueDateTime)}
+                       {renderInfoRow('Agente de Retención IVA:', xmlData.vatWithholdingAgent)}
+                       {renderInfoRow('Autorización:', xmlData.authorizationUuid, { mono: true, break: true })}
+                       {renderInfoRow('Serie:', xmlData.series)}
+                       {renderInfoRow('Número del DTE:', xmlData.dteNumber)}
+                    </div>
+                </div>
+            )}
             <div className="flex justify-end space-x-2 mt-3">
                 <button type="button" onClick={onCancel} className="text-xs py-1 px-3 bg-gray-300 dark:bg-gray-600 rounded-md">Cancelar</button>
                 <button type="submit" className="text-xs py-1 px-3 bg-blue-600 text-white rounded-md">Guardar</button>

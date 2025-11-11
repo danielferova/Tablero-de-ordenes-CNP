@@ -149,7 +149,7 @@ const OrderTable: React.FC<OrderTableProps> = ({ data, onEdit, currentUserRole, 
     return (
         <div className="overflow-x-auto">
             <table className="min-w-full">
-                <thead className="bg-gray-50 dark:bg-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700">
                     <tr>
                         <th className="w-12 px-4"></th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">No. Orden</th>

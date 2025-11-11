@@ -9,8 +9,6 @@ import { DownloadIcon } from './icons/DownloadIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import FilterControls from './FilterControls';
 import OrderTable from './OrderTable';
-import SummaryCards from './SummaryCards';
-
 
 interface FullOrderData extends Order, SubOrder {}
 
@@ -519,12 +517,6 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
                 </div>
             </div>
 
-            <SummaryCards 
-                data={filteredTableData}
-                currentUserRole={UserRole.Comercial}
-                currentUserUnit={null}
-                subOrderFinancials={subOrderFinancials}
-            />
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mt-6 p-4">
                 <FilterControls 
                     filters={tableFilters} 

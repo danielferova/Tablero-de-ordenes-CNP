@@ -31,6 +31,12 @@ export enum UserRole {
     Gerencia = "Gerencia",
 }
 
+export enum TaxType {
+    IVA = 'iva',
+    IVA_TIMBRE = 'iva_timbre',
+    EXENTO = 'exento',
+}
+
 export interface Director {
   name: string;
   team: string;
@@ -57,6 +63,7 @@ export interface FinancialMovement {
   paymentDate?: string;
   paidAmount?: number;
   creationDate: string;
+  taxType?: TaxType | null;
   // New fields for XML data persistence
   issuerName?: string;
   issuerNit?: string;

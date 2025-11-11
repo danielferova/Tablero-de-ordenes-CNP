@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Order, SubOrder, Unit, UserRole, OrderStatus, PaymentMethod, FinancialMovement, Director } from './types';
+import { Order, SubOrder, Unit, UserRole, OrderStatus, PaymentMethod, FinancialMovement, Director, TaxType } from './types';
 import Dashboard from './components/Dashboard';
 import NewOrderModal from './components/NewOrderModal';
 import EditSubOrderModal from './components/EditSubOrderModal';
@@ -68,6 +68,7 @@ const cleanFinancialMovement = (fm: FinancialMovement): FinancialMovement => ({
     paymentDate: fm.paymentDate,
     paidAmount: fm.paidAmount,
     creationDate: fm.creationDate,
+    taxType: fm.taxType,
     issuerName: fm.issuerName,
     issuerNit: fm.issuerNit,
     receiverName: fm.receiverName,
@@ -229,9 +230,12 @@ const App: React.FC = () => {
             
             const whatsappMessage = `*[NUEVA ORDEN: ${newOrder.orderNumber}]*\n\nSe ha creado una nueva orden para el cliente *${orderData.client}*.\n\n${assignmentText}\n${unitDetails}\n\nPor favor, revisar el tablero para más detalles.`;
 
-            const toastMessage = units.length === 1
-                ? `La orden ${newOrder.orderNumber} ha sido creada para ${orderData.client}, con una tarea para ${units[0]}.`
-                : `La orden ${newOrder.orderNumber} ha sido creada para ${orderData.client}, con tareas para ${units.length} unidades.`;
+            let toastMessage: string;
+            if (units.length === 1) {
+                toastMessage = `La orden ${newOrder.orderNumber} ha sido creada para ${orderData.client}, con una tarea para ${units[0]}.`;
+            } else {
+                toastMessage = `La orden ${newOrder.orderNumber} ha sido creada para ${orderData.client}, con tareas para las unidades: ${units.join(', ')}.`;
+            }
 
             triggerNotification(
                 "Orden Creada Exitosamente",
@@ -361,6 +365,7 @@ const App: React.FC = () => {
                     original.invoiceAmount !== fm.invoiceAmount ||
                     original.paymentDate !== fm.paymentDate ||
                     original.paidAmount !== fm.paidAmount ||
+                    original.taxType !== fm.taxType ||
                     original.issuerName !== fm.issuerName ||
                     original.issuerNit !== fm.issuerNit ||
                     original.receiverName !== fm.receiverName ||

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Order, SubOrder, FinancialMovement } from '../types';
+import { Order, SubOrder, FinancialMovement, TaxType } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { PencilIcon } from './icons/PencilIcon';
@@ -64,48 +64,15 @@ const BillingModeSelector: React.FC<{
     );
 };
 
-
-const AmountStatusCard: React.FC<{
-    title: string;
-    amount: number;
-    referenceAmount?: number;
-    isBalance?: boolean;
-}> = ({ title, amount, referenceAmount, isBalance = false }) => {
-    // Compare amounts with a small tolerance for floating point issues
-    const amountsMatch = referenceAmount !== undefined && Math.abs(amount - referenceAmount) < 0.01;
-
-    // Determine status only if there's a reference amount to compare against
-    const showStatus = referenceAmount !== undefined && referenceAmount > 0;
-    const isMismatched = showStatus && !amountsMatch;
-    
-    if (isBalance) {
-        return (
-             <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 flex flex-col justify-between">
-                <div>
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{title}</span>
-                    <p className={`text-2xl font-semibold mt-1 ${amount > 0 ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>{formatCurrency(amount)}</p>
-                </div>
-            </div>
-        )
-    }
-
-    return (
-        <div className={`p-3 rounded-lg flex flex-col justify-between ${isMismatched ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-inset ring-yellow-300 dark:ring-yellow-800' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
-            <div>
-                <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{title}</span>
-                    {isMismatched && <WarningIcon className="w-5 h-5 text-yellow-500" title="El monto no coincide con el total de la orden" />}
-                </div>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1">{formatCurrency(amount)}</p>
-            </div>
-            {isMismatched && (
-                 <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-2">
-                    Debería ser: {formatCurrency(referenceAmount)}
-                 </p>
-            )}
+const SummaryCard: React.FC<{ title: string; amount: number; color?: string; description?: string }> = ({ title, amount, color = 'text-gray-900 dark:text-white', description }) => (
+    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 flex flex-col justify-between">
+        <div>
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{title}</span>
+            <p className={`text-2xl font-semibold mt-1 ${color}`}>{formatCurrency(amount)}</p>
         </div>
-    );
-};
+        {description && <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-2">{description}</p>}
+    </div>
+);
 
 
 const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, financialMovements, onClose, onSubmit }) => {
@@ -145,6 +112,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
             paymentDate: m.paymentDate,
             paidAmount: m.paidAmount,
             creationDate: m.creationDate,
+            taxType: m.taxType,
             issuerName: m.issuerName,
             issuerNit: m.issuerNit,
             receiverName: m.receiverName,
@@ -173,6 +141,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
             ...movement,
             invoiceAmount: movement.invoiceAmount === null || isNaN(Number(movement.invoiceAmount)) ? null : Number(movement.invoiceAmount),
             paidAmount: movement.paidAmount === null || isNaN(Number(movement.paidAmount)) ? null : Number(movement.paidAmount),
+            taxType: movement.taxType || null,
         };
 
         if (activeForm?.type === 'add') {
@@ -198,19 +167,37 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
     };
     
     const totalOrderAmount = useMemo(() => subOrders.reduce((sum, so) => sum + (so.amount || 0), 0), [subOrders]);
+    
+    const calculateNetTotal = (movements: FinancialMovement[], amountField: 'invoiceAmount' | 'paidAmount'): number => {
+        return movements.reduce((sum, m) => {
+            const grossAmount = m[amountField] || 0;
+            let netAmount = grossAmount;
+            if (m.taxType === TaxType.IVA) {
+                netAmount = grossAmount / 1.12;
+            } else if (m.taxType === TaxType.IVA_TIMBRE) {
+                netAmount = grossAmount / 1.125;
+            }
+            return sum + netAmount;
+        }, 0);
+    };
+
     const totalInvoicedOverall = useMemo(() => localMovements.reduce((sum, m) => sum + (m.invoiceAmount || 0), 0), [localMovements]);
     const totalPaidOverall = useMemo(() => localMovements.reduce((sum, m) => sum + (m.paidAmount || 0), 0), [localMovements]);
+    const totalNetInvoicedOverall = useMemo(() => calculateNetTotal(localMovements, 'invoiceAmount'), [localMovements]);
+    const totalNetPaidOverall = useMemo(() => calculateNetTotal(localMovements, 'paidAmount'), [localMovements]);
 
 
     const renderPerTaskView = () => (
          <div className="space-y-6">
             <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-900/50 border-b-2 border-brand-primary mb-6">
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">Resumen General de la Orden</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <AmountStatusCard title="Monto Total Orden" amount={totalOrderAmount} />
-                    <AmountStatusCard title="Total Facturado" amount={totalInvoicedOverall} referenceAmount={totalOrderAmount} />
-                    <AmountStatusCard title="Total Cobrado" amount={totalPaidOverall} referenceAmount={totalOrderAmount} />
-                    <AmountStatusCard title="Saldo Pendiente" amount={totalInvoicedOverall - totalPaidOverall} isBalance />
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <SummaryCard title="Monto Total Orden" amount={totalOrderAmount} />
+                    <SummaryCard title="Total Facturado (Bruto)" amount={totalInvoicedOverall} />
+                    <SummaryCard title="Venta Real Facturado (Neto)" amount={totalNetInvoicedOverall} color="text-green-600 dark:text-green-400" />
+                    <SummaryCard title="Total Cobrado (Bruto)" amount={totalPaidOverall} />
+                    <SummaryCard title="Venta Real Cobrado (Neto)" amount={totalNetPaidOverall} color="text-green-600 dark:text-green-400" />
+                    <SummaryCard title="Saldo Pendiente" amount={totalInvoicedOverall - totalPaidOverall} color={totalInvoicedOverall - totalPaidOverall > 0 ? 'text-red-500' : undefined} />
                 </div>
             </div>
             {subOrders.map(so => {
@@ -268,6 +255,11 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
         const totalInvoiced = globalMovements.reduce((sum, m) => sum + (m.invoiceAmount || 0), 0);
         const totalPaid = globalMovements.reduce((sum, m) => sum + (m.paidAmount || 0), 0);
         const balance = totalInvoiced - totalPaid;
+        const totalNetInvoiced = calculateNetTotal(globalMovements, 'invoiceAmount');
+        const totalNetPaid = calculateNetTotal(globalMovements, 'paidAmount');
+        
+        const invoicedMismatch = totalOrderAmount > 0 && Math.abs(totalInvoiced - totalOrderAmount) > 0.01;
+        const paidMismatch = totalOrderAmount > 0 && Math.abs(totalPaid - totalOrderAmount) > 0.01;
 
         return (
              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700">
@@ -285,11 +277,13 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <AmountStatusCard title="Monto Total Orden" amount={totalOrderAmount} />
-                    <AmountStatusCard title="Total Facturado" amount={totalInvoiced} referenceAmount={totalOrderAmount} />
-                    <AmountStatusCard title="Total Cobrado" amount={totalPaid} referenceAmount={totalOrderAmount} />
-                    <AmountStatusCard title="Saldo Pendiente" amount={balance} isBalance />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <SummaryCard title="Monto Total Orden" amount={totalOrderAmount} />
+                    <SummaryCard title="Total Facturado (Bruto)" amount={totalInvoiced} description={invoicedMismatch ? `Debería ser: ${formatCurrency(totalOrderAmount)}` : undefined} />
+                    <SummaryCard title="Venta Real Facturado (Neto)" amount={totalNetInvoiced} color="text-green-600 dark:text-green-400" />
+                    <SummaryCard title="Total Cobrado (Bruto)" amount={totalPaid} description={paidMismatch ? `Debería ser: ${formatCurrency(totalOrderAmount)}` : undefined} />
+                    <SummaryCard title="Venta Real Cobrado (Neto)" amount={totalNetPaid} color="text-green-600 dark:text-green-400" />
+                    <SummaryCard title="Saldo Pendiente" amount={balance} color={balance > 0 ? 'text-red-500' : undefined} />
                 </div>
                 
                 {activeForm?.type === 'add' && activeForm.orderId === order.id && (
@@ -387,7 +381,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({ movements, activeForm, 
                     <tr>
                         <th className="p-2">No. Factura</th>
                         <th className="p-2">Fecha Factura</th>
-                        <th className="p-2">Monto Facturado</th>
+                        <th className="p-2">Monto Factura</th>
                         <th className="p-2">Fecha Pago</th>
                         <th className="p-2">Monto Pagado</th>
                         <th className="p-2 text-right">Acciones</th>
@@ -462,6 +456,7 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
         invoiceAmount: '',
         paymentDate: '',
         paidAmount: '',
+        taxType: '',
     });
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [xmlData, setXmlData] = useState<XmlInvoiceData | null>(null);
@@ -565,6 +560,7 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
                 invoiceAmount: movement.invoiceAmount?.toString() ?? '',
                 paymentDate: movement.paymentDate || '',
                 paidAmount: movement.paidAmount?.toString() ?? '',
+                taxType: movement.taxType || '',
             });
         } else {
             setFormData({
@@ -573,11 +569,12 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
                 invoiceAmount: '',
                 paymentDate: '',
                 paidAmount: '',
+                taxType: '',
             });
         }
     }, [movement]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({...prev, [name]: value}));
     };
@@ -585,17 +582,18 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
     const handleFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        const parsedInvoiceAmount = formData.invoiceAmount ? parseFloat(String(formData.invoiceAmount)) : NaN;
-        const parsedPaidAmount = formData.paidAmount ? parseFloat(String(formData.paidAmount)) : NaN;
+        const parsedInvoiceAmount = formData.invoiceAmount ? parseFloat(String(formData.invoiceAmount)) : null;
+        const parsedPaidAmount = formData.paidAmount ? parseFloat(String(formData.paidAmount)) : null;
 
         const payload = {
             ...(movement as FinancialMovement),
             ...identifier,
             invoiceNumber: formData.invoiceNumber || null,
             invoiceDate: formData.invoiceDate || null,
-            invoiceAmount: !isNaN(parsedInvoiceAmount) ? parsedInvoiceAmount : null,
+            invoiceAmount: (parsedInvoiceAmount === null || isNaN(parsedInvoiceAmount)) ? null : parsedInvoiceAmount,
             paymentDate: formData.paymentDate || null,
-            paidAmount: !isNaN(parsedPaidAmount) ? parsedPaidAmount : null,
+            paidAmount: (parsedPaidAmount === null || isNaN(parsedPaidAmount)) ? null : parsedPaidAmount,
+            taxType: (formData.taxType as TaxType) || null,
             ...(xmlData && {
                 issuerName: xmlData.issuerName,
                 issuerNit: xmlData.issuerNit,
@@ -625,8 +623,8 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
 
     return (
         <form onSubmit={handleFormSubmit} className="p-3 my-2 bg-gray-100 dark:bg-gray-900/50 rounded-md border border-gray-300 dark:border-gray-600">
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-x-3 gap-y-2 items-end">
-                <div className="md:col-span-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-3 gap-y-4 items-end">
+                <div>
                     <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">No. Factura</label>
                     <div className="flex">
                         <input type="text" name="invoiceNumber" value={formData.invoiceNumber} onChange={handleChange} placeholder="Serie-Número" className={`${inputClasses} rounded-r-none focus:z-10 relative`} />
@@ -651,6 +649,15 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
                 <div>
                     <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Monto Pagado</label>
                     <input type="number" name="paidAmount" value={formData.paidAmount} onChange={handleChange} placeholder="Monto" step="0.01" className={inputClasses} />
+                </div>
+                 <div>
+                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Régimen Fiscal</label>
+                    <select name="taxType" value={formData.taxType} onChange={handleChange} className={inputClasses} required>
+                        <option value="" disabled>Seleccionar...</option>
+                        <option value={TaxType.IVA}>Normal (Solo IVA)</option>
+                        <option value={TaxType.IVA_TIMBRE}>Especial (IVA + Timbre)</option>
+                        <option value={TaxType.EXENTO}>Exento de Impuestos</option>
+                    </select>
                 </div>
             </div>
             {xmlData && (

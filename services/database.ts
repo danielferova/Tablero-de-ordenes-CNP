@@ -1,4 +1,4 @@
-import { Order, SubOrder, Unit, PaymentMethod, OrderStatus, FinancialMovement, Director, UnitCredential, SystemRoleCredential, UserRole } from '../types';
+import { Order, SubOrder, Unit, PaymentMethod, OrderStatus, FinancialMovement, Director, UnitCredential, SystemRoleCredential, UserRole, TaxType } from '../types';
 import { initializeApp } from 'firebase/app';
 import {
     getFirestore,
@@ -123,6 +123,7 @@ export function listenToData(callback: (data: { orders: Order[], subOrders: SubO
                 paymentDate: data.paymentDate || null,
                 paidAmount: data.paidAmount ?? null,
                 creationDate: data.creationDate,
+                taxType: data.taxType || null,
                 // Read new XML fields
                 issuerName: data.issuerName || null,
                 issuerNit: data.issuerNit || null,
@@ -350,6 +351,7 @@ export async function updateOrderFinances(
             paymentDate: movement.paymentDate,
             paidAmount: movement.paidAmount,
             creationDate: movement.creationDate,
+            taxType: movement.taxType,
             // Add new XML fields for persistence
             issuerName: movement.issuerName,
             issuerNit: movement.issuerNit,

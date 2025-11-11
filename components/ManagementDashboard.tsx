@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Order, SubOrder, Unit, OrderStatus, FinancialMovement } from '../types';
+import { Order, SubOrder, Unit, OrderStatus, FinancialMovement, TaxType } from '../types';
 import { ALL_UNITS } from '../constants';
 import { CurrencyIcon } from './icons/CurrencyIcon';
 import { DocumentIcon } from './icons/DocumentIcon';
@@ -127,6 +127,51 @@ const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ data, subOrde
     }, [data, filters.unitFilter, filters.yearFilter, filters.monthFilter, filters.dateRange]);
 
     const summary = useMemo(() => {
+        // --- Financial Calculations ---
+        const calculateNetTotal = (movements: FinancialMovement[], amountField: 'invoiceAmount' | 'paidAmount'): number => {
+            return movements.reduce((sum, m) => {
+                const grossAmount = m[amountField] || 0;
+                if (grossAmount === 0) return sum;
+                let netAmount = grossAmount;
+                if (m.taxType === TaxType.IVA) {
+                    netAmount = grossAmount / 1.12;
+                } else if (m.taxType === TaxType.IVA_TIMBRE) {
+                    netAmount = grossAmount / 1.125;
+                }
+                return sum + netAmount;
+            }, 0);
+        };
+
+        const uniqueSubOrdersInFilter = new Map<string, SubOrder>();
+        filteredData.forEach(item => {
+            if (!uniqueSubOrdersInFilter.has(item.id)) {
+                uniqueSubOrdersInFilter.set(item.id, item);
+            }
+        });
+        const subOrderIds = Array.from(uniqueSubOrdersInFilter.keys());
+        const orderIds = new Set(Array.from(uniqueSubOrdersInFilter.values()).map(so => so.orderId));
+        
+        const relevantFinancialMovements = financialMovements.filter(fm => 
+            (fm.subOrderId && subOrderIds.includes(fm.subOrderId)) || 
+            (fm.orderId && !fm.subOrderId && orderIds.has(fm.orderId))
+        );
+        
+        const totalCobradoBruto = relevantFinancialMovements.reduce((sum, fm) => sum + (fm.paidAmount || 0), 0);
+        const ventaRealCobradaNeta = calculateNetTotal(relevantFinancialMovements, 'paidAmount');
+        const totalFacturadoBruto = relevantFinancialMovements.reduce((sum, fm) => sum + (fm.invoiceAmount || 0), 0);
+        const ventaRealFacturadaNeta = calculateNetTotal(relevantFinancialMovements, 'invoiceAmount');
+        const saldoPorCobrar = totalFacturadoBruto - totalCobradoBruto;
+        
+        const totalTrabajos = Array.from(uniqueSubOrdersInFilter.values()).reduce((sum, so) => sum + (so.amount || 0), 0);
+        const pendientePorFacturar = Math.max(0, totalTrabajos - totalFacturadoBruto);
+
+        // --- Operational Calculations ---
+        const totalOrders = orderIds.size;
+        const subOrdenesFacturadas = filteredData.filter(d => d.status === OrderStatus.Facturado).length;
+        const subOrdenesCobradas = filteredData.filter(d => d.status === OrderStatus.Cobrado).length;
+        const subOrdenesPendientes = filteredData.filter(d => d.status === OrderStatus.Pendiente).length;
+
+        // --- Revenue by Unit (for the chart) ---
         const revenueByUnitDirectorMap = new Map<Unit, { total: number; directors: Map<string, number> }>();
         const processedSubOrderIds = new Set<string>();
 
@@ -162,39 +207,20 @@ const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ data, subOrde
             .filter(u => u.amount > 0.01)
             .sort((a,b) => b.amount - a.amount);
             
-        const totalCobrado = revenueByUnit.reduce((sum, unit) => sum + unit.amount, 0);
-
-        const uniqueOrders = new Map<string, { paidAmount: number; invoiceTotalAmount: number; quotedAmount: number }>();
-        filteredData.forEach(item => {
-             if (!uniqueOrders.has(item.orderId)) {
-                uniqueOrders.set(item.orderId, {
-                    paidAmount: item.paidAmount || 0,
-                    invoiceTotalAmount: item.invoiceTotalAmount || 0,
-                    quotedAmount: item.quotedAmount || 0,
-                });
-            }
-        });
-
-        const totalFacturadoPorCobrar = Array.from(uniqueOrders.values()).reduce((sum, order) => {
-            const balance = Number(order.invoiceTotalAmount || 0) - Number(order.paidAmount || 0);
-            return sum + (balance > 0 ? balance : 0);
-        }, 0);
-        
-        const totalCotizadoGlobal = Array.from(uniqueOrders.values()).reduce((sum, order) => sum + Number(order.quotedAmount || 0), 0);
-        const totalFacturadoGlobal = Array.from(uniqueOrders.values()).reduce((sum, order) => sum + Number(order.invoiceTotalAmount || 0), 0);
-        const totalPendiente = totalCotizadoGlobal - totalFacturadoGlobal;
-        
         return {
-            totalCobrado,
-            totalFacturado: totalFacturadoPorCobrar,
-            totalPendiente,
+            totalCobradoBruto,
+            ventaRealCobradaNeta,
+            totalFacturadoBruto,
+            ventaRealFacturadaNeta,
+            saldoPorCobrar,
+            pendientePorFacturar,
             revenueByUnit,
-            totalOrders: uniqueOrders.size,
-            subOrdenesFacturadas: filteredData.filter(d => d.status === OrderStatus.Facturado).length,
-            subOrdenesCobradas: filteredData.filter(d => d.status === OrderStatus.Cobrado).length,
-            subOrdenesPendientes: filteredData.filter(d => d.status === OrderStatus.Pendiente).length
+            totalOrders,
+            subOrdenesFacturadas,
+            subOrdenesCobradas,
+            subOrdenesPendientes
         };
-    }, [filteredData, paidPerSubOrder]);
+    }, [filteredData, financialMovements, paidPerSubOrder]);
 
     const detailedAnalysis = useMemo(() => {
         if (!selectedAnalysisEntity) return null;
@@ -224,21 +250,16 @@ const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ data, subOrde
         
         const entityOrderIds = new Set(dateFilteredSubOrders.map(so => so.orderId));
         
-        // FIX: Ensure paidAmount is treated as a number to prevent string concatenation or type errors.
-        // FIX: Operator '+' cannot be applied to types 'unknown' and 'number'. Explicitly type sum as a number.
         const totalRevenue = Array.from(entityOrderIds).reduce((sum: number, orderId) => {
             const order = data.find(so => so.orderId === orderId);
             return sum + Number(order?.paidAmount || 0);
         }, 0);
         
-        // FIX: Ensure invoiceTotalAmount is treated as a number to prevent string concatenation or type errors.
-        // FIX: Operator '+' cannot be applied to types 'unknown' and 'number'. Explicitly type sum as a number.
         const totalInvoiced = Array.from(entityOrderIds).reduce((sum: number, orderId) => {
             const order = data.find(so => so.orderId === orderId);
             return sum + Number(order?.invoiceTotalAmount || 0);
         }, 0);
 
-        // FIX: Ensure both operands are numbers before subtraction.
         const balanceDue = Number(totalInvoiced) - Number(totalRevenue);
         
         const activeOrders = Array.from(entityOrderIds).filter(orderId => {
@@ -271,7 +292,6 @@ const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ data, subOrde
                 if (isNaN(timeA)) return 1;
                 if (isNaN(timeB)) return -1;
                 
-                // Ensure timestamps are treated as numbers for correct subtraction
                 return Number(timeB) - Number(timeA);
             })
         };
@@ -331,10 +351,13 @@ const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ data, subOrde
             </div>
 
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 mt-6">Resumen Financiero</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-                <MetricCard title="Total Cobrado (Ingresos)" value={formatCurrency(summary.totalCobrado)} icon={<CurrencyIcon className="text-green-500"/>} color="green" />
-                <MetricCard title="Total Facturado (Por Cobrar)" value={formatCurrency(summary.totalFacturado)} icon={<DocumentIcon className="text-blue-500"/>} color="blue" />
-                <MetricCard title="Total Pendiente (Por Facturar)" value={formatCurrency(summary.totalPendiente)} icon={<ClockIcon className="text-yellow-500"/>} color="yellow" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                <MetricCard title="Total Cobrado (Ingresos Brutos)" value={formatCurrency(summary.totalCobradoBruto)} icon={<CurrencyIcon className="text-green-500"/>} color="green" />
+                <MetricCard title="Venta Real Cobrada (Neto)" value={formatCurrency(summary.ventaRealCobradaNeta)} icon={<CurrencyIcon className="text-green-500"/>} color="green" />
+                <MetricCard title="Total Facturado (Acumulado Bruto)" value={formatCurrency(summary.totalFacturadoBruto)} icon={<DocumentIcon className="text-blue-500"/>} color="blue" />
+                <MetricCard title="Venta Real Facturada (Neto)" value={formatCurrency(summary.ventaRealFacturadaNeta)} icon={<DocumentIcon className="text-blue-500"/>} color="blue" />
+                <MetricCard title="Saldo por Cobrar" value={formatCurrency(summary.saldoPorCobrar)} icon={<ClockIcon className="text-red-500"/>} color="red" />
+                <MetricCard title="Pendiente por Facturar" value={formatCurrency(summary.pendientePorFacturar)} icon={<ClockIcon className="text-yellow-500"/>} color="yellow" />
             </div>
             
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 mt-6">Resumen Operativo</h3>
@@ -489,7 +512,7 @@ const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ data, subOrde
                             <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5 mb-4">
                                 <div
                                     className="bg-brand-primary h-2.5 rounded-full"
-                                    style={{ width: summary.totalCobrado > 0 ? `${(amount / summary.totalCobrado) * 100}%` : '0%' }}
+                                    style={{ width: summary.totalCobradoBruto > 0 ? `${(amount / summary.totalCobradoBruto) * 100}%` : '0%' }}
                                 ></div>
                             </div>
                             

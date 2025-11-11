@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Order, SubOrder, Unit, UserRole, OrderStatus } from '../types';
+import { Order, SubOrder, Unit, UserRole, OrderStatus, FinancialMovement } from '../types';
 import OrderTable from './OrderTable';
 import FilterControls from './FilterControls';
 import SummaryCards from './SummaryCards';
@@ -16,12 +16,13 @@ interface DashboardProps {
     onFilteredDataChange: (data: FullOrderData[]) => void;
     onNotifyPayment: (order: Order) => void;
     subOrderFinancials: { paidPerSubOrder: Map<string, number> };
+    financialMovements: FinancialMovement[];
     directors: string[];
     executives: string[];
     onAdjustBudget: (order: Order) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, currentUserDirectorName, onAddSubOrder, onFilteredDataChange, onNotifyPayment, subOrderFinancials, directors, executives, onAdjustBudget }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, currentUserUnit, currentUserDirectorName, onAddSubOrder, onFilteredDataChange, onNotifyPayment, subOrderFinancials, financialMovements, directors, executives, onAdjustBudget }) => {
     const [filters, setFilters] = useState<{
         unit: Unit[];
         status: string;
@@ -129,6 +130,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onEdit, currentUserRole, cu
                 currentUserRole={currentUserRole}
                 currentUserUnit={currentUserUnit}
                 subOrderFinancials={subOrderFinancials}
+                financialMovements={financialMovements}
             />
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mt-6 p-4">
                 <FilterControls 

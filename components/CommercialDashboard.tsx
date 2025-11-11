@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Order, SubOrder, Unit, UserRole, OrderStatus } from '../types';
+import { Order, SubOrder, Unit, UserRole, OrderStatus, FinancialMovement, TaxType } from '../types';
 import { ALL_UNITS } from '../constants';
 import { CurrencyIcon } from './icons/CurrencyIcon';
 import { DocumentIcon } from './icons/DocumentIcon';
@@ -15,6 +15,7 @@ interface FullOrderData extends Order, SubOrder {}
 interface CommercialDashboardProps {
     data: FullOrderData[];
     subOrderFinancials: { paidPerSubOrder: Map<string, number> };
+    financialMovements: FinancialMovement[];
     directorName: string;
     onEdit: (subOrderId: string, orderId: string) => void;
     onAddSubOrder: (order: Order) => void;
@@ -65,6 +66,7 @@ const MetricCard: React.FC<{
 const CommercialDashboard: React.FC<CommercialDashboardProps> = ({ 
     data, 
     subOrderFinancials, 
+    financialMovements,
     directorName, 
     onEdit, 
     onAddSubOrder, 
@@ -190,28 +192,42 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
 
 
     const salesSummary = useMemo(() => {
-        const uniqueOrders = new Map<string, { quotedAmount: number, paidAmount: number, invoiceTotalAmount: number }>();
+        const uniqueOrders = new Map<string, { quotedAmount: number }>();
         filteredSalesData.forEach(item => {
             if (!uniqueOrders.has(item.orderId)) {
                 uniqueOrders.set(item.orderId, {
                     quotedAmount: item.quotedAmount || 0,
-                    paidAmount: item.paidAmount || 0,
-                    invoiceTotalAmount: item.invoiceTotalAmount || 0
                 });
             }
         });
 
-        let totalCobrado = 0;
-        let totalCotizado = 0;
-        let saldoPorCobrar = 0;
+        const calculateNetTotal = (movements: FinancialMovement[], amountField: 'invoiceAmount' | 'paidAmount'): number => {
+            return movements.reduce((sum, m) => {
+                const grossAmount = m[amountField] || 0;
+                if (grossAmount === 0) return sum;
+                let netAmount = grossAmount;
+                if (m.taxType === TaxType.IVA) {
+                    netAmount = grossAmount / 1.12;
+                } else if (m.taxType === TaxType.IVA_TIMBRE) {
+                    netAmount = grossAmount / 1.125;
+                }
+                return sum + netAmount;
+            }, 0);
+        };
 
+        const filteredOrderIds = new Set(filteredSalesData.map(item => item.orderId));
+        const relevantMovements = financialMovements.filter(fm => fm.orderId && filteredOrderIds.has(fm.orderId));
+        
+        const ventaRealCobradaNeta = calculateNetTotal(relevantMovements, 'paidAmount');
+        const ventaRealFacturadaNeta = calculateNetTotal(relevantMovements, 'invoiceAmount');
+
+        const totalFacturadoBruto = relevantMovements.reduce((sum, m) => sum + (m.invoiceAmount || 0), 0);
+        const totalCobradoBruto = relevantMovements.reduce((sum, m) => sum + (m.paidAmount || 0), 0);
+        const saldoPorCobrar = totalFacturadoBruto - totalCobradoBruto;
+        
+        let totalCotizado = 0;
         uniqueOrders.forEach(order => {
-            totalCobrado += order.paidAmount;
             totalCotizado += order.quotedAmount;
-            const balance = order.invoiceTotalAmount - order.paidAmount;
-            if (balance > 0) {
-                saldoPorCobrar += balance;
-            }
         });
 
         const revenueByUnitMap = new Map<Unit, number>();
@@ -231,13 +247,14 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
             .sort((a, b) => b.amount - a.amount);
 
         return {
-            totalCobrado,
+            ventaRealCobradaNeta,
+            ventaRealFacturadaNeta,
             totalCotizado,
             saldoPorCobrar,
             totalOrders: uniqueOrders.size,
             revenueByUnit
         };
-    }, [filteredSalesData, subOrderFinancials.paidPerSubOrder]);
+    }, [filteredSalesData, financialMovements, subOrderFinancials.paidPerSubOrder]);
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -317,7 +334,8 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
 
         doc.setFontSize(11);
         doc.setFont(undefined, 'normal');
-        doc.text(`- Ingresos Totales (Cobrado): ${formatCurrency(salesSummary.totalCobrado)}`, 14, y); y += 7;
+        doc.text(`- Venta Real Cobrada (Neto): ${formatCurrency(salesSummary.ventaRealCobradaNeta)}`, 14, y); y += 7;
+        doc.text(`- Venta Real Facturada (Neto): ${formatCurrency(salesSummary.ventaRealFacturadaNeta)}`, 14, y); y += 7;
         doc.text(`- Monto Total Cotizado: ${formatCurrency(salesSummary.totalCotizado)}`, 14, y); y += 7;
         doc.text(`- Órdenes Totales: ${salesSummary.totalOrders}`, 14, y); y += 7;
         doc.text(`- Saldo por Cobrar: ${formatCurrency(salesSummary.saldoPorCobrar)}`, 14, y);
@@ -491,9 +509,10 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                    <MetricCard title="Ingresos Totales (Cobrado)" value={formatCurrency(salesSummary.totalCobrado)} icon={<CurrencyIcon className="text-green-500" />} color="green" />
-                    <MetricCard title="Monto Cotizado" value={formatCurrency(salesSummary.totalCotizado)} icon={<DocumentIcon className="text-blue-500" />} color="blue" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
+                    <MetricCard title="Venta Real Cobrada (Neto)" value={formatCurrency(salesSummary.ventaRealCobradaNeta)} icon={<CurrencyIcon className="text-green-500" />} color="green" />
+                    <MetricCard title="Venta Real Facturada (Neto)" value={formatCurrency(salesSummary.ventaRealFacturadaNeta)} icon={<DocumentIcon className="text-blue-500" />} color="blue" />
+                    <MetricCard title="Monto Cotizado" value={formatCurrency(salesSummary.totalCotizado)} icon={<DocumentIcon className="text-yellow-500" />} color="yellow" />
                     <MetricCard title="Órdenes Totales" value={salesSummary.totalOrders.toString()} icon={<BriefcaseIcon className="text-indigo-500" />} color="indigo" />
                     <MetricCard title="Saldo por Cobrar" value={formatCurrency(salesSummary.saldoPorCobrar)} icon={<CurrencyIcon className="text-red-500" />} color="red" />
                 </div>

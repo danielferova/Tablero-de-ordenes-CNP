@@ -3,7 +3,7 @@ import { DownloadIcon } from './icons/DownloadIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { DocumentIcon } from './icons/DocumentIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
-import { Order, SubOrder, FinancialMovement, Unit, OrderStatus } from '../types';
+import { Order, SubOrder, FinancialMovement, Unit, OrderStatus, TaxType } from '../types';
 
 interface FullOrderData extends Order, SubOrder {}
 
@@ -100,57 +100,58 @@ const ExportControls: React.FC<ExportControlsProps> = ({
     }, [fullTableData, managementFilters.unitFilter, managementFilters.yearFilter, managementFilters.monthFilter, managementFilters.dateRange]);
 
     const managementSummary = useMemo(() => {
-        // --- Revenue Calculations ---
-        const revenuePerSubOrder = new Map<string, number>();
-        allSubOrders.forEach(so => revenuePerSubOrder.set(so.id, 0));
+        // --- Financial Calculations ---
+        const calculateNetTotal = (movements: FinancialMovement[], amountField: 'invoiceAmount' | 'paidAmount'): number => {
+            return movements.reduce((sum, m) => {
+                const grossAmount = m[amountField] || 0;
+                if (grossAmount === 0) return sum;
+                let netAmount = grossAmount;
+                if (m.taxType === TaxType.IVA) {
+                    netAmount = grossAmount / 1.12;
+                } else if (m.taxType === TaxType.IVA_TIMBRE) {
+                    netAmount = grossAmount / 1.125;
+                }
+                return sum + netAmount;
+            }, 0);
+        };
+
+        const uniqueSubOrdersInFilter = new Map<string, SubOrder>();
+        filteredManagementData.forEach(item => {
+            if (!uniqueSubOrdersInFilter.has(item.id)) {
+                uniqueSubOrdersInFilter.set(item.id, item);
+            }
+        });
+        const subOrderIds = Array.from(uniqueSubOrdersInFilter.keys());
+        const orderIds = new Set(Array.from(uniqueSubOrdersInFilter.values()).map(so => so.orderId));
+        
+        const relevantFinancialMovements = allFinancialMovements.filter(fm => 
+            (fm.subOrderId && subOrderIds.includes(fm.subOrderId)) || 
+            (fm.orderId && !fm.subOrderId && orderIds.has(fm.orderId))
+        );
+        
+        const totalCobradoBruto = relevantFinancialMovements.reduce((sum, fm) => sum + (fm.paidAmount || 0), 0);
+        const ventaRealCobradaNeta = calculateNetTotal(relevantFinancialMovements, 'paidAmount');
+        const totalFacturadoBruto = relevantFinancialMovements.reduce((sum, fm) => sum + (fm.invoiceAmount || 0), 0);
+        const ventaRealFacturadaNeta = calculateNetTotal(relevantFinancialMovements, 'invoiceAmount');
+        const saldoPorCobrar = totalFacturadoBruto - totalCobradoBruto;
+        
+        const totalTrabajos = Array.from(uniqueSubOrdersInFilter.values()).reduce((sum, so) => sum + (so.amount || 0), 0);
+        const pendientePorFacturar = Math.max(0, totalTrabajos - totalFacturadoBruto);
+        
+        // --- Revenue by Unit & Director ---
+        const revenueByUnitDirectorMap = new Map<Unit, { total: number; directors: Map<string, number> }>();
+        const paidPerSubOrderMap = new Map<string, number>();
+
+        // Re-calculate paidPerSubOrder for the filtered data scope
         allFinancialMovements.forEach(m => {
             if (m.subOrderId && m.paidAmount) {
-                revenuePerSubOrder.set(
-                    m.subOrderId,
-                    (revenuePerSubOrder.get(m.subOrderId) || 0) + m.paidAmount
-                );
-            }
-        });
-        const globalPaymentsByOrderId = new Map<string, number>();
-        allFinancialMovements.forEach(m => {
-            if (m.orderId && !m.subOrderId && m.paidAmount) {
-                globalPaymentsByOrderId.set(
-                    m.orderId,
-                    (globalPaymentsByOrderId.get(m.orderId) || 0) + m.paidAmount
-                );
-            }
-        });
-        globalPaymentsByOrderId.forEach((totalGlobalPayment, orderId) => {
-            const subOrdersForOrder = allSubOrders.filter(so => so.orderId === orderId);
-            if (subOrdersForOrder.length === 0) return;
-            let totalOutstanding = 0;
-            const outstandingBalances = new Map<string, number>();
-            subOrdersForOrder.forEach(so => {
-                const balance = (so.amount || 0) - (revenuePerSubOrder.get(so.id) || 0);
-                if (balance > 0) {
-                    totalOutstanding += balance;
-                    outstandingBalances.set(so.id, balance);
-                }
-            });
-            if (totalOutstanding > 0) {
-                outstandingBalances.forEach((balance, subOrderId) => {
-                    const proportion = balance / totalOutstanding;
-                    const attributedRevenue = totalGlobalPayment * proportion;
-                    const revenueToAdd = Math.min(attributedRevenue, balance);
-                    revenuePerSubOrder.set(
-                        subOrderId,
-                        (revenuePerSubOrder.get(subOrderId) || 0) + revenueToAdd
-                    );
-                });
+                paidPerSubOrderMap.set(m.subOrderId, (paidPerSubOrderMap.get(m.subOrderId) || 0) + m.paidAmount);
             }
         });
 
-        const revenueByUnitDirectorMap = new Map<Unit, { total: number; directors: Map<string, number> }>();
-        const processedSubOrderIds = new Set<string>();
         filteredManagementData.forEach(item => {
-            if (processedSubOrderIds.has(item.id) || !item.director) return;
-            
-            const revenue = revenuePerSubOrder.get(item.id) || 0;
+            if (!item.director) return;
+            const revenue = paidPerSubOrderMap.get(item.id) || 0; // Use the locally calculated map
             if (revenue > 0) {
                 const correctUnit = getCorrectUnitName(item.unit);
                 if (!revenueByUnitDirectorMap.has(correctUnit)) {
@@ -158,14 +159,10 @@ const ExportControls: React.FC<ExportControlsProps> = ({
                 }
                 const unitData = revenueByUnitDirectorMap.get(correctUnit)!;
                 unitData.total += revenue;
-                unitData.directors.set(
-                    item.director,
-                    (unitData.directors.get(item.director) || 0) + revenue
-                );
+                unitData.directors.set(item.director, (unitData.directors.get(item.director) || 0) + revenue);
             }
-            processedSubOrderIds.add(item.id);
         });
-        
+
         const revenueByUnit = Array.from(revenueByUnitDirectorMap.entries())
             .map(([unit, data]) => ({
                 unit,
@@ -174,40 +171,21 @@ const ExportControls: React.FC<ExportControlsProps> = ({
                     name,
                     amount,
                     title: directorTitles[name] || ''
-                })).sort((a,b) => b.amount - a.amount)
+                })).sort((a, b) => b.amount - a.amount)
             }))
             .filter(u => u.amount > 0.01)
-            .sort((a,b) => b.amount - a.amount);
-            
-        const totalCobrado = revenueByUnit.reduce((sum, unit) => sum + unit.amount, 0);
+            .sort((a, b) => b.amount - a.amount);
 
-        const uniqueOrdersMap = new Map<string, { paidAmount: number; invoiceTotalAmount: number; quotedAmount: number; subOrders: FullOrderData[] }>();
+        // --- Operational Summaries ---
+        const uniqueOrdersMap = new Map<string, { subOrders: FullOrderData[] }>();
         filteredManagementData.forEach(item => {
-             if (!uniqueOrdersMap.has(item.orderId)) {
-                uniqueOrdersMap.set(item.orderId, {
-                    paidAmount: item.paidAmount || 0,
-                    invoiceTotalAmount: item.invoiceTotalAmount || 0,
-                    quotedAmount: item.quotedAmount || 0,
-                    subOrders: []
-                });
+            if (!uniqueOrdersMap.has(item.orderId)) {
+                uniqueOrdersMap.set(item.orderId, { subOrders: [] });
             }
             uniqueOrdersMap.get(item.orderId)!.subOrders.push(item);
         });
 
-        const totalFacturadoPorCobrar = Array.from(uniqueOrdersMap.values()).reduce((sum, order) => {
-            const balance = (order.invoiceTotalAmount || 0) - (order.paidAmount || 0);
-            return sum + (balance > 0 ? balance : 0);
-        }, 0);
-        
-        const totalCotizadoGlobal = Array.from(uniqueOrdersMap.values()).reduce((sum, order) => sum + (order.quotedAmount || 0), 0);
-        const totalFacturadoGlobal = Array.from(uniqueOrdersMap.values()).reduce((sum, order) => sum + (order.invoiceTotalAmount || 0), 0);
-        const totalPendiente = totalCotizadoGlobal - totalFacturadoGlobal;
-        
-        // --- Overall Status Calculation ---
-        let ordenesCompletadas = 0;
-        let ordenesEnProgreso = 0;
-        let ordenesPendientes = 0;
-
+        let ordenesCompletadas = 0, ordenesEnProgreso = 0, ordenesPendientes = 0;
         uniqueOrdersMap.forEach(order => {
             if (order.subOrders.length > 0 && order.subOrders.every(so => so.status === OrderStatus.Cobrado)) {
                 ordenesCompletadas++;
@@ -217,11 +195,14 @@ const ExportControls: React.FC<ExportControlsProps> = ({
                 ordenesEnProgreso++;
             }
         });
-
+        
         return {
-            totalCobrado,
-            totalFacturado: totalFacturadoPorCobrar,
-            totalPendiente,
+            totalCobradoBruto,
+            ventaRealCobradaNeta,
+            totalFacturadoBruto,
+            ventaRealFacturadaNeta,
+            saldoPorCobrar,
+            pendientePorFacturar,
             revenueByUnit,
             totalOrders: uniqueOrdersMap.size,
             subOrdenesFacturadas: filteredManagementData.filter(d => d.status === OrderStatus.Facturado).length,
@@ -232,6 +213,7 @@ const ExportControls: React.FC<ExportControlsProps> = ({
             ordenesPendientes,
         };
     }, [filteredManagementData, allSubOrders, allFinancialMovements]);
+
 
     const handlePdfDownload = () => {
         const { jsPDF } = (window as any).jspdf;
@@ -289,23 +271,32 @@ const ExportControls: React.FC<ExportControlsProps> = ({
         doc.setFont(undefined, 'bold');
         doc.text("Resumen Financiero", 14, y);
         y += 8;
-
-        doc.setFontSize(11);
+        doc.setFontSize(10);
         doc.setFont(undefined, 'normal');
+        
+        let yCol1 = y;
         doc.setTextColor("#00875a");
-        doc.text(`Total Cobrado (Ingresos): ${formatCurrency(managementSummary.totalCobrado)}`, 14, y);
-        y += 7;
+        doc.text(`Total Cobrado (Bruto): ${formatCurrency(managementSummary.totalCobradoBruto)}`, 14, yCol1); yCol1 += 7;
         doc.setTextColor("#0052cc");
-        doc.text(`Total Facturado (Por Cobrar): ${formatCurrency(managementSummary.totalFacturado)}`, 14, y);
-        y += 7;
+        doc.text(`Total Facturado (Bruto): ${formatCurrency(managementSummary.totalFacturadoBruto)}`, 14, yCol1); yCol1 += 7;
         doc.setTextColor("#de350b");
-        doc.text(`Total Pendiente (Por Facturar): ${formatCurrency(managementSummary.totalPendiente)}`, 14, y);
-        y += 12;
+        doc.text(`Saldo por Cobrar: ${formatCurrency(managementSummary.saldoPorCobrar)}`, 14, yCol1);
+
+        let yCol2 = y;
+        doc.setTextColor("#00875a");
+        doc.text(`Venta Real Cobrada (Neto): ${formatCurrency(managementSummary.ventaRealCobradaNeta)}`, 110, yCol2); yCol2 += 7;
+        doc.setTextColor("#0052cc");
+        doc.text(`Venta Real Facturada (Neto): ${formatCurrency(managementSummary.ventaRealFacturadaNeta)}`, 110, yCol2); yCol2 += 7;
+        doc.setTextColor("#D97706"); // Amber 600
+        doc.text(`Pendiente por Facturar: ${formatCurrency(managementSummary.pendientePorFacturar)}`, 110, yCol2);
+
+        y = Math.max(yCol1, yCol2) + 5;
+        doc.setTextColor("#343A40");
+
 
         // --- OVERALL STATUS ---
         doc.setFontSize(14);
         doc.setFont(undefined, 'bold');
-        doc.setTextColor("#343A40");
         doc.text("Estado General de Órdenes", 14, y);
         y += 8;
         doc.setFontSize(11);

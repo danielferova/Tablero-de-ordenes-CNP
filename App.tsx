@@ -901,6 +901,7 @@ const App: React.FC = () => {
                      <CommercialDashboard
                         data={processedData}
                         subOrderFinancials={subOrderFinancials}
+                        financialMovements={financialMovements}
                         directorName={currentUserDirectorName}
                         onEdit={handleEditClick}
                         onAddSubOrder={handleAddSubOrderClick}
@@ -949,6 +950,7 @@ const App: React.FC = () => {
                         onFilteredDataChange={setFilteredDataForExport}
                         onNotifyPayment={handleNotifyPaymentClick}
                         subOrderFinancials={subOrderFinancials}
+                        financialMovements={financialMovements}
                         directors={directors.map(d => d.name)}
                         executives={executives}
                         onAdjustBudget={handleAdjustBudgetClick}

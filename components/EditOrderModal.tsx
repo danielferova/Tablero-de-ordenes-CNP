@@ -171,8 +171,8 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, subOrders, finan
     const handleSaveMovement = (movement: FinancialMovement) => {
         const sanitizedMovement: FinancialMovement = {
             ...movement,
-            invoiceAmount: movement.invoiceAmount === null || isNaN(Number(movement.invoiceAmount)) ? undefined : Number(movement.invoiceAmount),
-            paidAmount: movement.paidAmount === null || isNaN(Number(movement.paidAmount)) ? undefined : Number(movement.paidAmount),
+            invoiceAmount: movement.invoiceAmount === null || isNaN(Number(movement.invoiceAmount)) ? null : Number(movement.invoiceAmount),
+            paidAmount: movement.paidAmount === null || isNaN(Number(movement.paidAmount)) ? null : Number(movement.paidAmount),
         };
 
         if (activeForm?.type === 'add') {
@@ -591,11 +591,11 @@ const MovementForm: React.FC<MovementFormProps> = ({ identifier, movement, onSav
         const payload = {
             ...(movement as FinancialMovement),
             ...identifier,
-            invoiceNumber: formData.invoiceNumber || undefined,
-            invoiceDate: formData.invoiceDate || undefined,
-            invoiceAmount: !isNaN(parsedInvoiceAmount) ? parsedInvoiceAmount : undefined,
-            paymentDate: formData.paymentDate || undefined,
-            paidAmount: !isNaN(parsedPaidAmount) ? parsedPaidAmount : undefined,
+            invoiceNumber: formData.invoiceNumber || null,
+            invoiceDate: formData.invoiceDate || null,
+            invoiceAmount: !isNaN(parsedInvoiceAmount) ? parsedInvoiceAmount : null,
+            paymentDate: formData.paymentDate || null,
+            paidAmount: !isNaN(parsedPaidAmount) ? parsedPaidAmount : null,
             ...(xmlData && {
                 issuerName: xmlData.issuerName,
                 issuerNit: xmlData.issuerNit,

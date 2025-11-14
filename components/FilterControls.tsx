@@ -61,7 +61,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, setFilters, is
 
     const isUnitFilterDisabled = isUnitDirector || isCommercialDirector;
     const isDirectorFilterDisabled = isCommercialDirector;
-    const isExecutiveFilterDisabled = isCommercialDirector;
+    const isExecutiveFilterDisabled = false;
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-4 border-b border-gray-200 dark:border-gray-700">

@@ -181,6 +181,7 @@ const CommercialDashboard: React.FC<CommercialDashboardProps> = ({
             if (tableFilters.client && !item.client.toLowerCase().includes(tableFilters.client.toLowerCase())) return false;
             if (tableFilters.orderNumber && !item.orderNumber.toLowerCase().includes(tableFilters.orderNumber.toLowerCase())) return false;
             if (tableFilters.invoiceNumber && !item.invoiceNumber?.toLowerCase().includes(tableFilters.invoiceNumber.toLowerCase())) return false;
+            if (tableFilters.executive !== 'all' && item.executive !== tableFilters.executive) return false;
 
             return true;
         });
